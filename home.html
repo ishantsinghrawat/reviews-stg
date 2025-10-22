@@ -53,7 +53,7 @@ let globalData = [];
 let currentData = [];
 let selectedCluster = null;
 
-fetch("data.json")
+fetch("data_2.json")
   .then(resp => resp.json())
   .then(data => {
     globalData = data.map(d => ({
@@ -203,6 +203,7 @@ function escapeHtml(text) {
 </body>
 
 </html>
+
 
 
 
