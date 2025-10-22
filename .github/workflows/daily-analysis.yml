@@ -48,7 +48,7 @@ jobs:
           GP_COUNTRY: ca
           GP_LANG: en
           MIN_DATE: "2025-01-01"     # optional
-          ONLY_VERSION: ""           # optional
+          ONLY_VERSION: "9.105.3"           # optional
           ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery,Other"
           HF_HOME: ${{ runner.temp }}/hf_home
           TRANSFORMERS_CACHE: ${{ runner.temp }}/hf_home
