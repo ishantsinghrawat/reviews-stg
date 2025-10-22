@@ -22,7 +22,7 @@ DEFAULT_LABELS = [
     "Authentication/Login", "Performance/Speed", "UI/UX",
     "Crashes/Bugs", "Payments", "Rewards/Offers",
     "Feature Requests", "Customer Support", "Location/Geolocation",
-    "Refunds", "Delivery", "Other"
+    "Refunds", "Delivery"
 ]
 
 def log(msg: str):
