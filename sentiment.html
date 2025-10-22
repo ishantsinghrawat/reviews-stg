@@ -1,0 +1,233 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Sentiment</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+    .toolbar { display:flex; align-items:center; gap:10px; margin: 8px 0 12px; flex-wrap: wrap; }
+    button { padding:8px 12px; border:0; border-radius:8px; background:#f2f3f5; cursor:pointer; }
+    button:hover { background:#e8e9ec; }
+    a.btn { padding:8px 12px; border-radius:8px; background:#1f75fe; color:white; text-decoration:none; font-weight:600; }
+    a.btn:hover { opacity:.9; }
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; border-top: 1px solid #eee; vertical-align: top; }
+    th { text-align: left; }
+    td.center, th.center { text-align: center; }
+    #hint { color:#666; font-style: italic; }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <div class="navbar">
+    <a href="index.html">🏠 Home</a>
+    <a href="home.html">🌍 Topic Clusters</a>
+    <a href="overview.html">✍ Topics Overview</a>
+    <a href="sentiment.html">🙂 Sentiments</a>
+    <a href="review_trend.html">📈 Review Trends</a>
+    <a href="rating_distribution.html">📊 Rating Distribution</a>
+    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+  <h1>Sentiment</h1>
+
+  <div class="toolbar">
+    <button id="resetSentBtn" title="Clear selection">Reset Sentiment</button>
+    <a id="downloadSentLink" class="btn" download="reviews_sentiment.csv" href="#">Download Reviews</a>
+  </div>
+
+  <div id="chart" style="height:460px;"></div>
+
+  <h3>Reviews</h3>
+  <div id="hint">Click a bar (category × sentiment) or a legend item (sentiment) to view the matching reviews.</div>
+  <div id="table"></div>
+
+<script>
+const DATA_URL = 'reviews_2.json'; // ← change if needed
+
+let RAW = [];
+// selection: { sentiment: 'Positive'|'Neutral'|'Negative', category: 'some-cat'|null }
+let selected = null;
+
+const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negative',
+                    'neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral',
+                    'positive':'Positive','POSITIVE':'Positive','LABEL_2':'Positive' };
+const orderSent = ['Negative','Neutral','Positive'];
+const fmtDate = s => !s ? '' : (s.length > 10 ? s.slice(0,10) : s);
+
+// ---------- CSV download helper ----------
+function toCSVURI(rows) {
+  if (!rows.length) return 'data:text/csv;charset=utf-8,';
+  const cols = ['review','category','sentiment_std','rating','review_date'];
+  const header = cols.join(',');
+  const body = rows.map(r =>
+    cols.map(c => {
+      let v = r[c] ?? '';
+      v = String(v).replace(/"/g, '""');
+      if (/[",\n]/.test(v)) v = `"${v}"`;
+      return v;
+    }).join(',')
+  ).join('\n');
+  return 'data:text/csv;charset=utf-8,' + [header, body].join('\n');
+}
+
+// ---------- Table render ----------
+function renderTable(rows, maxRows=1000) {
+  const tbl = document.getElementById('table');
+  const hint = document.getElementById('hint');
+  if (!rows.length) {
+    tbl.innerHTML = '';
+    hint.textContent = selected
+      ? 'No reviews found for that selection.'
+      : 'Click a bar (category × sentiment) or a legend item (sentiment) to view reviews.';
+    return;
+  }
+  hint.textContent = '';
+  const slice = rows.slice(0, maxRows);
+  let html = `<table>
+    <thead><tr>
+      <th>Review</th><th class="center">Sentiment</th><th class="center">Rating</th><th class="center">Date</th>
+    </tr></thead><tbody>`;
+  for (const r of slice) {
+    html += `<tr>
+      <td>${(r.review ?? '').replace(/</g,'&lt;')}</td>
+      <td class="center">${r.sentiment_std ?? ''}</td>
+      <td class="center">${r.rating ?? ''}</td>
+      <td class="center">${fmtDate(r.review_date ?? '')}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>`;
+  tbl.innerHTML = html;
+}
+
+// ---------- Aggregation for chart ----------
+function uniq(arr){ return Array.from(new Set(arr)); }
+function groupSentCounts(rows) {
+  const cats = uniq(rows.map(r => r.category).filter(Boolean)).sort();
+  const base = {}; orderSent.forEach(s => base[s] = cats.map(() => 0));
+  const idx = Object.fromEntries(cats.map((c,i) => [c,i]));
+  for (const r of rows) {
+    const s = r.sentiment_std;
+    if (!orderSent.includes(s)) continue;
+    const i = idx[r.category];
+    base[s][i] += 1;
+  }
+  return { cats, base };
+}
+
+// ---------- Dimming helpers ----------
+function hexToRgba(hex, a=1) {
+  const h = hex.replace('#','');
+  const bigint = parseInt(h, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r},${g},${b},${a})`;
+}
+function styleDimming() {
+  const chart = document.getElementById('chart');
+  if (!chart || !chart.data) return;
+  // No selection → restore
+  if (!selected) {
+    Plotly.restyle(chart, {'marker.opacity': 1});
+    return;
+  }
+  const cats = chart.data[0].x.slice();
+  if (selected.category) {
+    // Emphasize selected.category across sentiments; dim other categories
+    chart.data.forEach((tr, i) => {
+      const colorHex = Array.isArray(tr.marker.color) ? null : (tr.marker.color || '#1f77b4');
+      const rgba = cats.map(c => hexToRgba(colorHex, c === selected.category ? 1.0 : 0.15));
+      Plotly.restyle(chart, {'marker.color': [rgba], 'marker.opacity':[1]}, [i]);
+    });
+  } else if (selected.sentiment) {
+    // Emphasize selected.sentiment across ALL categories; dim other sentiments
+    chart.data.forEach((tr, i) => {
+      const isActive = String(tr.name).trim() === selected.sentiment;
+      Plotly.restyle(chart, {'marker.opacity': isActive ? 1.0 : 0.15}, [i]);
+    });
+  }
+}
+
+// ---------- Build chart & wire events ----------
+function drawChart() {
+  const { cats, base } = groupSentCounts(RAW);
+  const traces = orderSent.map((s, ti) => ({
+    name: s,
+    x: cats,
+    y: base[s],
+    type: 'bar',
+    customdata: cats.map(() => s), // keep sentiment on each point
+    hovertemplate: 'Category=%{x}<br>Sentiment=%{customdata}<br>Count=%{y}<extra></extra>'
+  }));
+  const layout = {
+    barmode: 'group',
+    title: 'Sentiment by Category',
+    margin: {l:40,r:10,t:50,b:80},
+    xaxis: {title: "Sentiments" },
+    yaxis: {title: "Count of Reviews" }
+  };
+  Plotly.newPlot('chart', traces, layout, {displayModeBar:false});
+
+  const chart = document.getElementById('chart');
+
+  // Bar click → (category + sentiment)
+  chart.on('plotly_click', ev => {
+    const pt = ev.points?.[0];
+    if (!pt) return;
+    const cat = String(pt.x).trim();
+    const sent = pt.customdata;
+    selected = { category: cat, sentiment: sent };
+    styleDimming();
+    const view = RAW.filter(r => r.category === cat && r.sentiment_std === sent);
+    renderTable(view);
+    document.getElementById('downloadSentLink').href = toCSVURI(view);
+  });
+
+  // Legend click → sentiment (all categories). Prevent default toggle.
+  chart.on('plotly_legendclick', ev => {
+    const legendSent = ev?.data?.[ev.curveNumber]?.name; // 'Positive' etc.
+    if (!legendSent) return false;
+    selected = { category: null, sentiment: legendSent };
+    styleDimming();
+    const view = RAW.filter(r => r.sentiment_std === legendSent);
+    renderTable(view);
+    document.getElementById('downloadSentLink').href = toCSVURI(view);
+    return false; // prevent default legend hide/show
+  });
+}
+
+// ---------- Reset ----------
+document.getElementById('resetSentBtn').addEventListener('click', () => {
+  selected = null;
+  styleDimming();
+  renderTable([]);
+  document.getElementById('hint').textContent =
+    'Click a bar (category × sentiment) or a legend item (sentiment) to view the matching reviews.';
+  document.getElementById('downloadSentLink').href = toCSVURI(RAW);
+});
+
+// ---------- Load & init ----------
+fetch(DATA_URL).then(r => r.json()).then(data => {
+  RAW = (data || []).map(d => ({
+    review: d.review ?? '',
+    category: (d.category ?? '').toString().trim(),
+    sentiment_std: d.sentiment_std ?? SENTI_MAP[d.sentiment] ?? d.sentiment ?? '',
+    rating: d.rating ?? '',
+    review_date: d.review_date ?? ''
+  }));
+  drawChart();
+  // default: download all
+  document.getElementById('downloadSentLink').href = toCSVURI(RAW);
+});
+</script>
+</body>
+
+</html>
+
+
+
+
+
+
+

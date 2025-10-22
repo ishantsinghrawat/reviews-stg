@@ -1,0 +1,250 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Overview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+    .toolbar { display:flex; align-items:center; gap:10px; margin: 8px 0 12px; flex-wrap: wrap; }
+    select { min-width: 280px; padding: 6px; }
+    button { padding:8px 12px; border:0; border-radius:8px; background:#f2f3f5; cursor:pointer; }
+    button:hover { background:#e8e9ec; }
+    a.btn { padding:8px 12px; border-radius:8px; background:#1f75fe; color:white; text-decoration:none; font-weight:600; }
+    a.btn:hover { opacity:.9; }
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; border-top: 1px solid #eee; vertical-align: top; }
+    th { text-align: left; }
+    td.center, th.center { text-align: center; }
+    #hint { color:#666; font-style: italic; }
+  </style>
+</head>
+<body>
+  
+  <!-- Navbar -->
+  <div class="navbar">
+    <a href="index.html">🏠 Home</a>
+    <a href="home.html">🌍 Topic Clusters</a>
+    <a href="overview.html">✍ Topics Overview</a>
+    <a href="sentiment.html">🙂 Sentiments</a>
+    <a href="review_trend.html">📈 Review Trends</a>
+    <a href="rating_distribution.html">📊 Rating Distribution</a>
+    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+  
+  <h1>Overview</h1>
+
+  <div class="toolbar">
+    <label for="categorySelect"><strong>Filter by Category</strong></label>
+    <select id="categorySelect" multiple></select>
+    <button id="resetBtn">Reset selection</button>
+    <a id="downloadLink" class="btn" download="reviews_overview.csv" href="#">Download Reviews</a>
+  </div>
+
+  <div id="chart" style="height:420px;"></div>
+  <h3>Reviews</h3>
+  <div id="hint">Tip: Click a bar or select one or more categories to view reviews.</div>
+  <div id="table"></div>
+
+<script>
+const DATA_URL = 'reviews_2.json'; // ← change if needed
+
+let RAW = [];
+let clickedGroup = null;      // single category via chart click
+let selectedGroups = [];      // multi-select from dropdown
+let CAT_ORDER = [];           // sorted category list
+let CAT_COLOR = {};           // category -> base hex color
+
+const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negative',
+                    'neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral',
+                    'positive':'Positive','POSITIVE':'Positive','LABEL_2':'Positive' };
+
+const fmtDate = s => !s ? '' : (s.length > 10 ? s.slice(0,10) : s);
+const uniq = arr => Array.from(new Set(arr));
+
+function rgba(hex, a=1){
+  const h = hex.replace('#','');
+  const bigint = parseInt(h, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// Build a categorical palette & map each category to a base color
+function assignCategoryColors(cats){
+  // Use Plotly's palettes if available; otherwise a fallback list
+  const d3 = Plotly.d3;
+  const palettes = [
+    (d3 && d3.schemeCategory10) || ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'],
+    (d3 && d3.schemeSet3) || ['#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9','#bc80bd','#ccebc5','#ffed6f']
+  ];
+  const flat = palettes.flat();
+  const colors = {};
+  cats.forEach((c, i) => { colors[c] = flat[i % flat.length]; });
+  return colors;
+}
+
+// ---------- CSV download helper ----------
+function toCSVURI(rows) {
+  if (!rows.length) return 'data:text/csv;charset=utf-8,';
+  const cols = ['review','category','sentiment_std','rating','review_date'];
+  const header = cols.join(',');
+  const body = rows.map(r =>
+    cols.map(c => {
+      let v = r[c] ?? '';
+      v = String(v).replace(/"/g, '""');
+      if (/[",\n]/.test(v)) v = `"${v}"`;
+      return v;
+    }).join(',')
+  ).join('\n');
+  return 'data:text/csv;charset=utf-8,' + [header, body].join('\n');
+}
+
+// ---------- Table render ----------
+function renderTable(rows, maxRows=1000) {
+  const tbl = document.getElementById('table');
+  const hint = document.getElementById('hint');
+  if (!rows.length) {
+    tbl.innerHTML = '';
+    hint.textContent = clickedGroup || selectedGroups.length
+      ? 'No reviews match the current selection.'
+      : 'Tip: Click a bar or select one or more categories to view reviews.';
+    return;
+  }
+  hint.textContent = '';
+  const slice = rows.slice(0, maxRows);
+  let html = `<table>
+    <thead><tr>
+      <th>Review</th><th class="center">Sentiment</th><th class="center">Rating</th><th class="center">Date</th>
+    </tr></thead><tbody>`;
+  for (const r of slice) {
+    html += `<tr>
+      <td>${(r.review ?? '').replace(/</g,'&lt;')}</td>
+      <td class="center">${r.sentiment_std ?? ''}</td>
+      <td class="center">${r.rating ?? ''}</td>
+      <td class="center">${fmtDate(r.review_date ?? '')}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>`;
+  tbl.innerHTML = html;
+}
+
+// Current filtered set (dropdown OR click; click wins)
+function filteredRows() {
+  let arr = RAW;
+  if (clickedGroup) {
+    arr = arr.filter(r => r.category === clickedGroup);
+  } else if (selectedGroups.length) {
+    const set = new Set(selectedGroups);
+    arr = arr.filter(r => set.has(r.category));
+  }
+  return arr;
+}
+
+// ---------- Draw chart ----------
+function drawChart() {
+  const rows = RAW;
+  CAT_ORDER = uniq(rows.map(r => r.category).filter(Boolean)).sort();
+
+  // counts
+  const counts = CAT_ORDER.map(c => rows.filter(r => r.category === c).length);
+
+  // base colors: each category gets its own color initially
+  if (!Object.keys(CAT_COLOR).length) {
+    CAT_COLOR = assignCategoryColors(CAT_ORDER);
+  }
+  let perBarColors = CAT_ORDER.map(c => CAT_COLOR[c]);
+
+  // If a bar was clicked: keep that vivid, dim others
+  if (clickedGroup) {
+    perBarColors = CAT_ORDER.map(c => c === clickedGroup ? CAT_COLOR[c] : rgba(CAT_COLOR[c], 0.2));
+  }
+  // Else if dropdown is used: highlight selected, dim non-selected
+  else if (selectedGroups.length) {
+    const set = new Set(selectedGroups);
+    perBarColors = CAT_ORDER.map(c => set.has(c) ? CAT_COLOR[c] : rgba(CAT_COLOR[c], 0.2));
+  }
+
+  const data = [{
+    x: CAT_ORDER,
+    y: counts,
+    type: 'bar',
+    marker: { color: perBarColors },
+    hovertemplate: 'Category=%{x}<br>Count=%{y}<extra></extra>'
+  }];
+
+  const layout = {
+    title: 'Topics vs Count',
+    margin: {l:40,r:10,t:50,b:80},
+    xaxis: { title: "Review Category" },
+    yaxis: { title: "Count of Reviews" },
+  };
+
+  Plotly.newPlot('chart', data, layout, {displayModeBar:false});
+
+  // click handler
+  const chart = document.getElementById('chart');
+  chart.on('plotly_click', ev => {
+    const cat = ev.points?.[0]?.x;
+    if (!cat) return;
+    clickedGroup = cat;         // click wins over dropdown
+    drawChart();
+    const view = filteredRows();
+    renderTable(view);
+    document.getElementById('downloadLink').href = toCSVURI(view);
+  });
+}
+
+// Populate category multi-select
+function fillDropdown() {
+  const sel = document.getElementById('categorySelect');
+  const cats = uniq(RAW.map(r => r.category).filter(Boolean)).sort();
+  sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  sel.addEventListener('change', () => {
+    // collect selected options
+    selectedGroups = Array.from(sel.selectedOptions).map(o => o.value);
+    clickedGroup = null; // dropdown overrides any prior click
+    drawChart();
+    const view = filteredRows();
+    renderTable(view);
+    document.getElementById('downloadLink').href = toCSVURI(view);
+  });
+}
+
+// Reset
+document.getElementById('resetBtn').addEventListener('click', () => {
+  clickedGroup = null;
+  selectedGroups = [];
+  const sel = document.getElementById('categorySelect');
+  Array.from(sel.options).forEach(o => (o.selected = false));
+  drawChart();                 // redraw with full colorful palette
+  renderTable([]);
+  document.getElementById('hint').textContent = 'Tip: Click a bar or select one or more categories to view reviews.';
+  document.getElementById('downloadLink').href = toCSVURI(RAW);
+});
+
+// ---------- Load data & init ----------
+fetch(DATA_URL).then(r => r.json()).then(data => {
+  // normalize sentiments & categories
+  RAW = (data || []).map(d => ({
+    review: d.review ?? '',
+    category: (d.category ?? '').toString().trim(),
+    sentiment_std: d.sentiment_std ?? SENTI_MAP[d.sentiment] ?? d.sentiment ?? '',
+    rating: d.rating ?? '',
+    review_date: d.review_date ?? ''
+  }));
+  fillDropdown();
+  drawChart();
+  // default: no selection → download all
+  document.getElementById('downloadLink').href = toCSVURI(RAW);
+});
+</script>
+</body>
+</html>
+
+
+
+
+
+

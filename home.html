@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reviews Analysis v1.0</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h2 { text-align: center; }
+    .navbar { padding: 10px; border-bottom: 1px solid #ccc; text-align: center; }
+    .navbar a { margin: 0 10px; text-decoration: none; color: #007bff; }
+    .navbar a:hover { text-decoration: underline; }
+    #controls { text-align: center; margin-bottom: 15px; }
+    #plot { width: 100%; height: 600px; }
+    #reviewBox { margin-top: 20px; padding: 10px; border: 1px solid #ddd; background: #fafafa;
+                 white-space: pre-wrap; max-height: 400px; overflow-y: scroll; }
+    button, select, input { margin-top: 10px; padding: 8px 15px; cursor: pointer; border: none; border-radius: 5px; }
+    button { background: #007bff; color: white; }
+    button:hover { background: #0056b3; }
+    select, input { background: #f0f0f0; }
+    mark { background-color: yellow; }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <div class="navbar">
+    <a href="index.html">🏠 Home</a>
+    <a href="overview.html">✍ Topics Overview</a>
+    <a href="sentiment.html">🙂 Sentiments</a>
+    <a href="review_trend.html">📈 Review Trends</a>
+    <a href="rating_distribution.html">📊 Rating Distribution</a>
+    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+  </div>
+
+  <h2>Reviews Analysis v1.0</h2>
+
+  <div id="controls">
+    <label for="clusterFilter"><b>Filter by Cluster:</b></label>
+    <select id="clusterFilter" onchange="updatePlot()">
+      <option value="all">All Clusters</option>
+    </select>
+    <input type="text" id="searchBox" placeholder="Search within reviews..." oninput="updatePlot()" />
+    <br/>
+    <button onclick="downloadCSVAll()">Download All Reviews (CSV)</button>
+    <button onclick="downloadCSVFiltered()">Download Filtered Reviews (CSV)</button>
+  </div>
+
+  <div id="plot"></div>
+  <div id="reviewBox"><b>Click a point to see all reviews in this cluster...</b></div>
+
+<script>
+let globalData = [];
+let currentData = [];
+let selectedCluster = null;
+
+fetch("data.json")
+  .then(resp => resp.json())
+  .then(data => {
+    globalData = data.map(d => ({
+      x: Number(d.x),
+      y: Number(d.y),
+      z: Number(d.z ?? 0),
+      phrase: d.phrase ?? "",
+      review: d.review ?? "",
+      cluster: d.cluster_name ?? String(d.cluster),
+      review_date: d.review_date ?? "",
+      rating: d.rating ?? ""
+    }));
+
+    // Populate cluster dropdown
+    const clusters = [...new Set(globalData.map(d => d.cluster))].sort();
+    const select = document.getElementById("clusterFilter");
+    clusters.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c; opt.textContent = c;
+      select.appendChild(opt);
+    });
+
+    currentData = globalData;
+    drawPlot(currentData);
+  })
+  .catch(err => {
+    document.getElementById("plot").innerHTML = `<p style='color:red'>Failed to load data.json: ${err.message}</p>`;
+  });
+
+function drawPlot(data, highlightCluster = null) {
+  const clusters = [...new Set(data.map(d => d.cluster))];
+  const colorscale = Plotly.d3.scale.category10();
+
+  const traces = clusters.map((clusterName, idx) => {
+    const clusterPoints = data.filter(d => d.cluster === clusterName);
+    return {
+      x: clusterPoints.map(d => d.x),
+      y: clusterPoints.map(d => d.y),
+      z: clusterPoints.map(d => d.z),
+      mode: "markers",
+      type: "scatter3d",
+      marker: {
+        size: 4,
+        color: highlightCluster && clusterName !== highlightCluster ? "#ddd" : colorscale(idx),
+        opacity: highlightCluster && clusterName !== highlightCluster ? 0.1 : 0.9
+      },
+      name: clusterName,
+      customdata: clusterPoints.map(d => [d.phrase, d.review_date, d.rating]),
+      hovertemplate:
+        "<b>Aspect:</b> %{customdata[0]}<br>" +
+        "<b>Date:</b> %{customdata[1]}<br>" +
+        "<b>Rating:</b> %{customdata[2]}<extra></extra>"
+    };
+  });
+
+  Plotly.newPlot("plot", traces, {
+    title: "GMA v9.105.3",
+    scene: {
+      xaxis: { title: "X-axis" },
+      yaxis: { title: "Y-axis" },
+      zaxis: { title: "Z-axis" }
+    },
+    legend: { title: { text: "Clusters" }, orientation: "h" }
+  });
+
+  const plotDiv = document.getElementById("plot");
+  plotDiv.on('plotly_click', function(ev){
+    const selCluster = ev.points[0].data.name;
+    selectedCluster = selCluster;
+    const searchTerm = document.getElementById("searchBox").value.trim().toLowerCase();
+
+    const clusterReviewsSet = new Set();
+    globalData.forEach(d => {
+      if(d.cluster === selCluster && d.review) {
+        clusterReviewsSet.add(`${d.review_date} | ⭐${d.rating} | ${d.review}`);
+      }
+    });
+
+    const clusterReviews = Array.from(clusterReviewsSet).map(review => {
+      let highlightedReview = escapeHtml(review);
+      if(searchTerm) {
+        const re = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), "gi");
+        highlightedReview = highlightedReview.replace(re, match => `<mark>${match}</mark>`);
+      }
+      return `- ${highlightedReview}`;
+    });
+
+    document.getElementById("reviewBox").innerHTML =
+      `<b>Cluster:</b> ${escapeHtml(selCluster)}<br/><b>Reviews in this cluster:</b><br/>${clusterReviews.join("<br/>")}`;
+
+    drawPlot(globalData, selCluster);
+  });
+}
+
+function updatePlot() {
+  const selected = document.getElementById("clusterFilter").value;
+  const search = document.getElementById("searchBox").value.toLowerCase();
+
+  currentData = (selected === "all" ? globalData : globalData.filter(d => d.cluster === selected));
+  selectedCluster = selected === "all" ? null : selected;
+
+  if (search) {
+    currentData = currentData.filter(d => d.review.toLowerCase().includes(search));
+  }
+
+  drawPlot(currentData, selectedCluster);
+  document.getElementById("reviewBox").innerHTML = "<b>Click a point to see all reviews in this cluster...</b>";
+}
+
+function arrayToCSV(arr) {
+  const header = ["phrase","review","cluster","review_date","rating","x","y","z"];
+  const rows = arr.map(d => [d.phrase,d.review,d.cluster,d.review_date,d.rating,d.x,d.y,d.z]);
+  return [header.join(",")].concat(rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","))).join("\n");
+}
+
+function downloadBlob(text, filename) {
+  const blob = new Blob([text], {type: "text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.style.display = "none";
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(url);
+  a.remove();
+}
+
+function downloadCSVAll() {
+  if (!globalData.length) return alert("No data loaded.");
+  downloadBlob(arrayToCSV(globalData), "reviews_all.csv");
+}
+
+function downloadCSVFiltered() {
+  if (!currentData.length) return alert("No filtered records to download.");
+  const sel = document.getElementById("clusterFilter").value || "all";
+  const namePart = sel.replace(/[^\w]+/g,"_").slice(0,30);
+  downloadBlob(arrayToCSV(currentData), `reviews_${namePart}.csv`);
+}
+
+function escapeHtml(text) {
+  if (!text) return "";
+  return String(text).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+                    .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+</script>
+</body>
+
+</html>
+
+
+
+
