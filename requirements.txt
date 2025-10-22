@@ -1,0 +1,10 @@
+# requirements.txt
+pandas==2.2.2
+numpy==1.26.4
+
+# Hugging Face models (zero-shot + sentiment)
+transformers==4.44.2
+torch==2.3.1     # CPU wheel installs on ubuntu-latest
+
+# Google Play reviews
+google-play-scraper==1.2.6
