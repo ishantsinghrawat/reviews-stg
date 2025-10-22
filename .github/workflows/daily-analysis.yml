@@ -50,8 +50,9 @@ jobs:
           MIN_DATE: "2025-01-01"     # optional
           ONLY_VERSION: ""           # optional
           ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery,Other"
-          HF_HOME: ~/.cache/huggingface
-          TRANSFORMERS_CACHE: ~/.cache/huggingface
+          HF_HOME: ${{ runner.temp }}/hf_home
+          TRANSFORMERS_CACHE: ${{ runner.temp }}/hf_home
+          HF_HUB_DISABLE_SYMLINKS: "1"
           HF_HUB_DISABLE_TELEMETRY: 1
           TOKENIZERS_PARALLELISM: false
         run: |
