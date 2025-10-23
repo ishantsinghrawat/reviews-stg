@@ -181,10 +181,10 @@ def main():
     ios_lang = os.getenv("IOS_LANG", "en")
     
     if include_ios:
-    log(f"[fetch] also pulling App Store reviews id={ios_app_id} ({ios_lang}-{ios_country})…")
-    df_ios = fetch_app_store_rss(app_id=ios_app_id, country=ios_country, lang=ios_lang)
+      log(f"[fetch] also pulling App Store reviews id={ios_app_id} ({ios_lang}-{ios_country})…")
+      df_ios = fetch_app_store_rss(app_id=ios_app_id, country=ios_country, lang=ios_lang)
     else:
-    df_ios = pd.DataFrame(columns=df_gp.columns)
+      df_ios = pd.DataFrame(columns=df_gp.columns)
     
     # Merge the sources
     df = pd.concat([df_gp, df_ios], ignore_index=True)
