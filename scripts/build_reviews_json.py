@@ -85,10 +85,10 @@ def fetch_google_play(package: str, lang: str, country: str) -> pd.DataFrame:
     return df
 # --- Apple RSS fetcher (no external scraper packages needed) ---
 def fetch_app_store_rss(app_id=375695000, country="ca", lang="en", max_pages=10, sleep=0.3):
-"""
-Pulls the most recent ~500 reviews from Apple's public RSS feed.
-Returns a DataFrame with the project's schema and source='App Store'.
-"""
+  """
+  Pulls the most recent ~500 reviews from Apple's public RSS feed.
+  Returns a DataFrame with the project's schema and source='App Store'.
+  """
   def rss_url(page):
     return (f"https://itunes.apple.com/rss/customerreviews/page={page}/id={app_id}"
     f"/sortby=mostrecent/json?l={lang}&cc={country}")
