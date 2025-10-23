@@ -48,7 +48,7 @@ jobs:
           GP_COUNTRY: ca
           GP_LANG: en
           MIN_DATE: "2025-01-01"     # optional
-          ONLY_VERSION: "9.105.3"           # optional
+          ONLY_VERSION: "9.105.3"    # optional
           ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery,Other"
           HF_HOME: ${{ runner.temp }}/hf_home
           TRANSFORMERS_CACHE: ${{ runner.temp }}/hf_home
@@ -79,6 +79,28 @@ jobs:
           else
             echo "No report produced."
           fi
+
+      # 🔔 EMAIL ALERT (Outlook/Office365 via SMTP) — only when alert == true
+      - name: Send alert email (Office365 SMTP)
+        if: steps.compare.outputs.alert == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.O365_SMTP_SERVER }}
+          server_port: ${{ secrets.O365_SMTP_PORT }}
+          secure: false                      # STARTTLS on port 587
+          username: ${{ secrets.O365_USERNAME }}
+          password: ${{ secrets.O365_PASSWORD }}
+          from: ${{ secrets.ALERT_FROM }}
+          to: ${{ secrets.ALERT_TO }}
+          subject: "🚨 Negative sentiment increase detected — ${{ github.repository }} — run #${{ github.run_number }}"
+          content_type: text/html
+          attachments: delta_report.md
+          body: |
+            <p>Hi team,</p>
+            <p>The daily review refresh detected an increase in <b>Negative</b> sentiment in one or more categories.</p>
+            <p><b>Repo:</b> <a href="https://github.com/${{ github.repository }}">${{ github.repository }}</a><br/>
+            <b>Workflow run:</b> <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">#${{ github.run_number }}</a></p>
+            <p>The full Markdown report is attached (<code>delta_report.md</code>).</p>
 
       - name: Commit updated data.json + reviews.json
         if: steps.compare.outputs.updated == 'true'
