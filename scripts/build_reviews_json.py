@@ -2,6 +2,8 @@
 import os, sys, json, argparse, datetime as dt
 import pandas as pd
 import numpy as np
+import requests
+import time
 
 # data source
 from google_play_scraper import reviews_all, Sort
@@ -81,7 +83,47 @@ def fetch_google_play(package: str, lang: str, country: str) -> pd.DataFrame:
     if "review_date" in df.columns:
         df["review_date"] = pd.to_datetime(df["review_date"], errors="coerce").dt.strftime("%Y-%m-%d")
     return df
+# --- Apple RSS fetcher (no external scraper packages needed) ---
+def fetch_app_store_rss(app_id=375695000, country="ca", lang="en", max_pages=10, sleep=0.3):
+"""
+Pulls the most recent ~500 reviews from Apple's public RSS feed.
+Returns a DataFrame with the project's schema and source='App Store'.
+"""
+  def rss_url(page):
+    return (f"https://itunes.apple.com/rss/customerreviews/page={page}/id={app_id}"
+    f"/sortby=mostrecent/json?l={lang}&cc={country}")
+  rows = []
+  for page in range(1, max_pages + 1):
+    r = requests.get(rss_url(page), timeout=30)
+    if r.status_code != 200:
+      log(f"[appstore] HTTP {r.status_code} on page {page}; stopping.")
+      break
+    data = r.json()
+    entries = data.get("feed", {}).get("entry", [])
+    if not entries or len(entries) <= 1:
+      break # only app metadata or no more reviews
+    for e in entries[1:]:
+      updated = e.get("updated", {}).get("label")
+      rows.append({
+          "source": "App Store",
+          "review": (e.get("content", {}) or {}).get("label"),
+          "rating": int((e.get("im:rating", {}) or {}).get("label", "0") or 0),
+          "review_date": pd.to_datetime(updated, errors="coerce").strftime("%Y-%m-%d") if updated else None,
+          "user_name": (e.get("author", {}) or {}).get("name", {}).get("label"),
+          "review_title": (e.get("title", {}) or {}).get("label"),
+          "app_version": (e.get("im:version", {}) or {}).get("label"),
+          "developer_response": None,
+          "country_code": country,
+          "language_code": lang,
+      })
+    time.sleep(sleep)
 
+  if not rows:
+    return pd.DataFrame(columns=["review","rating","review_date","source"])
+  df = pd.DataFrame(rows)
+  df["review"] = df["review"].astype(str).str.strip()
+  df = df[df["review"].str.len() > 0].reset_index(drop=True)
+  return df
 # --------------------------
 # NLP
 # --------------------------
@@ -131,8 +173,23 @@ def main():
     args = parse_args()
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
 
-    df = fetch_google_play(args.package, args.lang, args.country)
-
+    df_gp = fetch_google_play(args.package, args.lang, args.country)
+        # NEW: toggle Apple via env/flags if you want (or just always fetch)
+    include_ios = os.getenv("INCLUDE_APPSTORE", "true").lower() == "true"
+    ios_app_id = int(os.getenv("IOS_APP_ID", "375695000"))
+    ios_country = os.getenv("IOS_COUNTRY", "ca")
+    ios_lang = os.getenv("IOS_LANG", "en")
+    
+    if include_ios:
+    log(f"[fetch] also pulling App Store reviews id={ios_app_id} ({ios_lang}-{ios_country})…")
+    df_ios = fetch_app_store_rss(app_id=ios_app_id, country=ios_country, lang=ios_lang)
+    else:
+    df_ios = pd.DataFrame(columns=df_gp.columns)
+    
+    # Merge the sources
+    df = pd.concat([df_gp, df_ios], ignore_index=True)
+    
+    # (rest of your script stays the same: date filters, NLP, JSON outputs)
     # optional filters
     if args.min_date:
         try:
