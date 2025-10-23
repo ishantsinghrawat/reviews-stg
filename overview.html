@@ -239,9 +239,23 @@ fetch(DATA_URL).then(r => r.json()).then(data => {
   // default: no selection → download all
   document.getElementById('downloadLink').href = toCSVURI(RAW);
 });
+  <script>
+  fetch('reviews.json?nocache=' + Date.now())
+  .then(r => r.json())
+  .then(data => {
+  // Example: split counts by store
+  const byStore = d3.rollup(data, v => v.length, d => d.source);
+  console.log('Totals by store:', Object.fromEntries(byStore));
+  
+  // If you have an existing category chart, you can filter:
+  // const filtered = data.filter(d => d.source === 'App Store'); // or 'Google Play'
+  // renderCharts(filtered);
+  });
+  </script>
 </script>
 </body>
 </html>
+
 
 
 
