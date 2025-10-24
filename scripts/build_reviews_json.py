@@ -45,7 +45,7 @@ def parse_args():
     # NLP + outputs
     p.add_argument("--labels", default=os.getenv("ZS_LABELS", ",".join(DEFAULT_LABELS)))
     p.add_argument("--out-new", default="new_data.json")
-    p.add_argument("--out-reviews", default="reviews.json")
+    p.add_argument("--out-reviews", default="data.json")
     return p.parse_args()
 
 # --------------------------
