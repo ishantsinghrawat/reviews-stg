@@ -1,33 +1,29 @@
+# scripts/compare_negatives.py
 import argparse
 import pandas as pd
-import sys
 
-SENTI_MAP = {
-    "negative": "Negative", "NEGATIVE": "Negative", "LABEL_0": "Negative",
-    "neutral": "Neutral", "NEUTRAL": "Neutral", "LABEL_1": "Neutral",
-    "positive": "Positive", "POSITIVE": "Positive", "LABEL_2": "Positive",
-}
-
+SENTI_NEG = "Negative"
 
 def load(df_path):
     df = pd.read_json(df_path)
-    # normalize columns we rely on
-    for c in ["category", "sentiment_std", "source"]:
+    for c in ["category", "sentiment_std", "source", "app_version"]:
         if c not in df.columns:
             df[c] = None
-    # map sentiment if raw labels slipped through
-    df["sentiment_std"] = df["sentiment_std"].map(SENTI_MAP).fillna(df["sentiment_std"])
-    # fill missing source for safety
+    # normalize a bit
     df["source"] = df["source"].fillna("Unknown")
     df["category"] = df["category"].fillna("Uncategorized")
+    df["app_version"] = df["app_version"].fillna("Unknown")
     return df
 
-
-def neg_counts_by_source_category(df):
-    mask = df["sentiment_std"].eq("Negative")
-    grp = df[mask].groupby(["source", "category"]).size().reset_index(name="neg_count")
+def neg_counts_by_keys(df):
+    mask = df["sentiment_std"].eq(SENTI_NEG)
+    grp = (
+        df[mask]
+        .groupby(["source", "app_version", "category"])
+        .size()
+        .reset_index(name="neg_count")
+    )
     return grp
-
 
 def main():
     ap = argparse.ArgumentParser()
@@ -41,71 +37,63 @@ def main():
     cur = load(args.current)
     new = load(args.new)
 
-    cur_neg = neg_counts_by_source_category(cur).set_index(["source", "category"])
-    new_neg = neg_counts_by_source_category(new).set_index(["source", "category"])
+    cur_neg = neg_counts_by_keys(cur).set_index(["source", "app_version", "category"])
+    new_neg = neg_counts_by_keys(new).set_index(["source", "app_version", "category"])
 
-    # join, compute delta
     all_idx = sorted(set(cur_neg.index).union(set(new_neg.index)))
     rows = []
-    for sc in all_idx:
-        prev = int(cur_neg.loc[sc, "neg_count"]) if sc in cur_neg.index else 0
-        nxt = int(new_neg.loc[sc, "neg_count"]) if sc in new_neg.index else 0
+    for key in all_idx:
+        prev = int(cur_neg.loc[key, "neg_count"]) if key in cur_neg.index else 0
+        nxt = int(new_neg.loc[key, "neg_count"]) if key in new_neg.index else 0
         abs_delta = nxt - prev
         rel_delta = (abs_delta / prev) if prev > 0 else (1.0 if abs_delta > 0 else 0.0)
         rows.append({
-            "source": sc[0],
-            "category": sc[1],
+            "source": key[0],
+            "app_version": key[1],
+            "category": key[2],
             "prev": prev,
             "curr": nxt,
             "abs_delta": abs_delta,
-            "rel_delta": rel_delta
+            "rel_delta": rel_delta,
         })
     delta = pd.DataFrame(rows)
 
-    # flag increases
     increases = delta[
         (delta["abs_delta"] >= args.threshold_abs) |
         (delta["rel_delta"] >= args.threshold_rel)
     ]
     alert = not increases.empty
 
-    # write report grouped by store
+    # Write Markdown report
     with open(args.report, "w", encoding="utf-8") as f:
-        f.write("# Negative sentiment changes by Store and Category\n\n")
+        f.write("# Negative sentiment changes (by Store, Version, Category)\n\n")
         if increases.empty:
             f.write("_No significant increases detected_\n")
         else:
-            for store, grp in increases.sort_values(
-                ["source", "abs_delta"], ascending=[True, False]
-            ).groupby("source"):
-                f.write(f"## {store}\n\n")
+            for (src, ver), grp in increases.sort_values(
+                ["source", "app_version", "abs_delta"], ascending=[True, True, False]
+            ).groupby(["source", "app_version"]):
+                f.write(f"## {src} — v{ver}\n\n")
                 for _, r in grp.iterrows():
                     f.write(
                         f"- **{r['category']}**: {r['prev']} → {r['curr']} "
-                        f"(Δ {r['abs_delta']:+}, {r['rel_delta']:.0%} relative)\n"
+                        f"(Δ {r['abs_delta']:+}, {r['rel_delta']:.0%})\n"
                     )
                 f.write("\n")
 
-        # Optional: summary table for all (debugging)
+        # Optional: full snapshot (debug)
         f.write("\n---\n\n### Full snapshot (debug)\n\n")
         if len(delta):
-            f.write(delta.sort_values(["source", "category"]).to_string(index=False))
+            f.write(delta.sort_values(["source", "app_version", "category"]).to_string(index=False))
             f.write("\n")
 
-    # expose outputs to GH Actions
-    # updated means the dataset changed at all (size or values)
+    # outputs for GH Actions
+    print(f"alert={'true' if alert else 'false'}")
     updated = (
-        new_neg.reset_index().sort_values(["source", "category"]).values.tolist()
-        != cur_neg.reset_index().sort_values(["source", "category"]).values.tolist()
+        new_neg.reset_index().sort_values(["source","app_version","category"]).values.tolist()
+        != cur_neg.reset_index().sort_values(["source","app_version","category"]).values.tolist()
     )
-
-    # print outputs for Actions (GITHUB_OUTPUT)
-    out = []
-    out.append(f"alert={'true' if alert else 'false'}")
-    out.append(f"updated={'true' if updated else 'false'}")
-    sys.stdout.write("\n".join(out))
-    sys.stdout.flush()
-
+    print(f"updated={'true' if updated else 'false'}")
 
 if __name__ == "__main__":
     main()
