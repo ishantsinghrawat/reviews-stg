@@ -61,7 +61,7 @@ jobs:
           LAST_DAYS: "30"            # <-- pull only the last month
 
           # NLP labels & caches
-          ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery,Other"
+          ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery"
           HF_HOME: ${{ runner.temp }}/hf_home
           TRANSFORMERS_CACHE: ${{ runner.temp }}/hf_home
           HF_HUB_DISABLE_SYMLINKS: "1"
