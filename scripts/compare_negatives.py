@@ -66,7 +66,7 @@ def main():
 
     # Write Markdown report
     with open(args.report, "w", encoding="utf-8") as f:
-        f.write("# Negative sentiment changes (by Store, Version, Category)\n\n")
+        f.write("# Negative sentiment changes\n\n")
         if increases.empty:
             f.write("_No significant increases detected_\n")
         else:
