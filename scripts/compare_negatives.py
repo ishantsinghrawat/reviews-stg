@@ -82,7 +82,7 @@ def append_details_table(path, rows, only_categories=None, max_rows=300):
             f.write("_(no negative rows to display)_\n")
             return
         # Build Markdown table manually (no extra deps)
-        cols = ["Category","Review","App Version","Date"]
+        cols = ["Category","Review","App Version","Date","Source"]
         f.write("| " + " | ".join(cols) + " |\n")
         f.write("| " + " | ".join(["---"]*len(cols)) + " |\n")
         for i, row in enumerate(neg):
