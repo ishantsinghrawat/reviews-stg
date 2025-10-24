@@ -1,7 +1,7 @@
 # scripts/compare_negatives.py
 import argparse
 import pandas as pd
-
+import os, sys
 SENTI_NEG = "Negative"
 
 def load(df_path):
@@ -94,6 +94,21 @@ def main():
         != cur_neg.reset_index().sort_values(["source","app_version","category"]).values.tolist()
     )
     print(f"updated={'true' if updated else 'false'}")
+
+
+# NEW: also write to GITHUB_OUTPUT so the workflow step gets real outputs
+out_lines = [
+    f"alert={'true' if alert else 'false'}",
+    f"updated={'true' if updated else 'false'}",
+]
+gh_out = os.environ.get("GITHUB_OUTPUT")
+
+if gh_out:
+    with open(gh_out, "a", encoding="utf-8") as fh:
+        fh.write("\n".join(out_lines) + "\n")
+else:
+    # fallback: still emit to stdout (already done above)
+    sys.stderr.write("GITHUB_OUTPUT not set; printed values only.\n")
 
 if __name__ == "__main__":
     main()
