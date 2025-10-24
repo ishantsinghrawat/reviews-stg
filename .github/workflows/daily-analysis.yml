@@ -70,7 +70,7 @@ jobs:
         run: |
           python scripts/build_reviews_json.py \
             --out-new new_data.json \
-            --out-reviews data.json        # ✅ write live site file directly
+            --out-reviews reviews.json        # ✅ write live site file directly
 
       - name: Compare negative sentiment vs current data.json
         id: compare
