@@ -42,7 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build new_data.json + reviews.json (GP + iOS → NLP, last 30 days)
+      - name: Build new_data.json + data.json (GP + iOS → NLP, last 30 days)
         env:
           # Google Play
           GP_PACKAGE: com.mcdonalds.superapp
@@ -70,7 +70,7 @@ jobs:
         run: |
           python scripts/build_reviews_json.py \
             --out-new new_data.json \
-            --out-reviews reviews.json
+            --out-reviews data.json        # ✅ write live site file directly
 
       - name: Compare negative sentiment vs current data.json
         id: compare
@@ -92,37 +92,34 @@ jobs:
             echo "No report produced."
           fi
 
-      # # 🔔 EMAIL ALERT (Outlook/Office365 via SMTP) — only when alert == true
-      # - name: Send alert email (Office365 SMTP)
-      #   if: steps.compare.outputs.alert == 'true'
-      #   uses: dawidd6/action-send-mail@v3
-      #   with:
-      #     server_address: ${{ secrets.O365_SMTP_SERVER }}
-      #     server_port: ${{ secrets.O365_SMTP_PORT }}
-      #     secure: false                      # STARTTLS on port 587
-      #     username: ${{ secrets.O365_USERNAME }}
-      #     password: ${{ secrets.O365_PASSWORD }}
-      #     from: ${{ secrets.ALERT_FROM }}
-      #     to: ${{ secrets.ALERT_TO }}
-      #     subject: "🚨 Negative sentiment increase detected — ${{ github.repository }} — run #${{ github.run_number }}"
-      #     content_type: text/html
-      #     attachments: delta_report.md
-      #     body: |
-      #       <p>Hi team,</p>
-      #       <p>The daily review refresh detected an increase in <b>Negative</b> sentiment in one or more categories.</p>
-      #       <p><b>Repo:</b> <a href="https://github.com/${{ github.repository }}">${{ github.repository }}</a><br/>
-      #       <b>Workflow run:</b> <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">#${{ github.run_number }}</a></p>
-      #       <p>The full Markdown report is attached (<code>delta_report.md</code>).</p>
-
-      - name: Commit updated data.json + reviews.json
-        if: steps.compare.outputs.updated == 'true'
+      # ✅ Promote based on actual file differences (no gating on compare.updated)
+      - name: Promote new_data.json → data.json (if different)
         run: |
-          mv new_data.json data.json
+          set -e
+          if [ -f new_data.json ]; then
+            if [ ! -f data.json ]; then
+              mv new_data.json data.json
+            else
+              if ! cmp -s new_data.json data.json; then
+                echo "data.json differs; replacing."
+                mv new_data.json data.json
+              else
+                echo "data.json unchanged; removing new_data.json."
+                rm -f new_data.json
+              fi
+            fi
+          else
+            echo "new_data.json not found; skipping promote."
+          fi
+
+      - name: Commit updated data.json
+        run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data.json reviews.json
-          git commit -m "chore: daily Google Play refresh"
-          git push
+          git add data.json || true
+          git diff --cached --quiet && echo "No changes to commit." || git commit -m "chore: refresh data.json"
+          git push || true
 
       - name: Open/Update alert issue on negative-sentiment increase
         if: steps.compare.outputs.alert == 'true'
