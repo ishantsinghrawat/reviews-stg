@@ -8,7 +8,7 @@
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
     .toolbar { display:flex; align-items:center; gap:10px; margin: 8px 0 12px; flex-wrap: wrap; }
-    select { min-width: 280px; padding: 6px; }
+    select { min-width: 240px; padding: 6px; }
     button { padding:8px 12px; border:0; border-radius:8px; background:#f2f3f5; cursor:pointer; }
     button:hover { background:#e8e9ec; }
     a.btn { padding:8px 12px; border-radius:8px; background:#1f75fe; color:white; text-decoration:none; font-weight:600; }
@@ -18,28 +18,39 @@
     th { text-align: left; }
     td.center, th.center { text-align: center; }
     #hint { color:#666; font-style: italic; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#f5f5f7; padding:2px 6px; border-radius:6px; }
   </style>
 </head>
 <body>
-  
   <!-- Navbar -->
-  <div class="navbar">
+  <div class="navbar" style="margin-bottom:10px;">
     <a href="index.html">🏠 Home</a>
     <a href="home.html">🌍 Topic Clusters</a>
-    <a href="overview.html">✍ Topics Overview</a>
+    <a href="overview.html"><b>✍ Topics Overview</b></a>
     <a href="sentiment.html">🙂 Sentiments</a>
     <a href="review_trend.html">📈 Review Trends</a>
     <a href="rating_distribution.html">📊 Rating Distribution</a>
     <a href="avg_rating.html">⭐ Avg Rating by Version</a>
-  
+  </div>
+
   <h1>Overview</h1>
 
+  <!-- Filters toolbar -->
   <div class="toolbar">
-    <label for="categorySelect"><strong>Filter by Category</strong></label>
+    <label for="storeSelect"><strong>Store</strong></label>
+    <select id="storeSelect"></select>
+
+    <label for="versionSelect"><strong>Version</strong></label>
+    <select id="versionSelect"></select>
+
+    <label for="categorySelect"><strong>Category</strong></label>
     <select id="categorySelect" multiple></select>
-    <button id="resetBtn">Reset selection</button>
+
+    <button id="resetBtn">Reset</button>
     <a id="downloadLink" class="btn" download="reviews_overview.csv" href="#">Download Reviews</a>
   </div>
+
+  <div id="summary" style="margin:8px 0 16px; color:#333;"></div>
 
   <div id="chart" style="height:420px;"></div>
   <h3>Reviews</h3>
@@ -47,13 +58,13 @@
   <div id="table"></div>
 
 <script>
-const DATA_URL = 'data.json'; // ← change if needed
+const DATA_URL = 'data.json'; // ← your site uses data.json
 
 let RAW = [];
-let clickedGroup = null;      // single category via chart click
-let selectedGroups = [];      // multi-select from dropdown
+let clickedGroup = null;      // category chosen by clicking chart
+let selectedGroups = [];      // categories chosen via multi-select
 let CAT_ORDER = [];           // sorted category list
-let CAT_COLOR = {};           // category -> base hex color
+let CAT_COLOR = {};           // category -> base color
 
 const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negative',
                     'neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral',
@@ -63,7 +74,7 @@ const fmtDate = s => !s ? '' : (s.length > 10 ? s.slice(0,10) : s);
 const uniq = arr => Array.from(new Set(arr));
 
 function rgba(hex, a=1){
-  const h = hex.replace('#','');
+  const h = (hex || '#cccccc').replace('#','');
   const bigint = parseInt(h, 16);
   const r = (bigint >> 16) & 255;
   const g = (bigint >> 8) & 255;
@@ -71,9 +82,7 @@ function rgba(hex, a=1){
   return `rgba(${r},${g},${b},${a})`;
 }
 
-// Build a categorical palette & map each category to a base color
 function assignCategoryColors(cats){
-  // Use Plotly's palettes if available; otherwise a fallback list
   const d3 = Plotly.d3;
   const palettes = [
     (d3 && d3.schemeCategory10) || ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'],
@@ -85,10 +94,10 @@ function assignCategoryColors(cats){
   return colors;
 }
 
-// ---------- CSV download helper ----------
+// ---------- CSV download helper (now includes Store & Version) ----------
 function toCSVURI(rows) {
   if (!rows.length) return 'data:text/csv;charset=utf-8,';
-  const cols = ['review','category','sentiment_std','rating','review_date'];
+  const cols = ['review','category','sentiment_std','rating','review_date','source','app_version'];
   const header = cols.join(',');
   const body = rows.map(r =>
     cols.map(c => {
@@ -101,7 +110,7 @@ function toCSVURI(rows) {
   return 'data:text/csv;charset=utf-8,' + [header, body].join('\n');
 }
 
-// ---------- Table render ----------
+// ---------- Table render (now shows Store & Version) ----------
 function renderTable(rows, maxRows=1000) {
   const tbl = document.getElementById('table');
   const hint = document.getElementById('hint');
@@ -116,7 +125,12 @@ function renderTable(rows, maxRows=1000) {
   const slice = rows.slice(0, maxRows);
   let html = `<table>
     <thead><tr>
-      <th>Review</th><th class="center">Sentiment</th><th class="center">Rating</th><th class="center">Date</th>
+      <th>Review</th>
+      <th class="center">Sentiment</th>
+      <th class="center">Rating</th>
+      <th class="center">Date</th>
+      <th class="center">Store</th>
+      <th class="center">Version</th>
     </tr></thead><tbody>`;
   for (const r of slice) {
     html += `<tr>
@@ -124,15 +138,32 @@ function renderTable(rows, maxRows=1000) {
       <td class="center">${r.sentiment_std ?? ''}</td>
       <td class="center">${r.rating ?? ''}</td>
       <td class="center">${fmtDate(r.review_date ?? '')}</td>
+      <td class="center">${r.source || 'Unknown'}</td>
+      <td class="center">${r.app_version || 'Unknown'}</td>
     </tr>`;
   }
   html += `</tbody></table>`;
   tbl.innerHTML = html;
 }
 
-// Current filtered set (dropdown OR click; click wins)
+// ---------- Filters ----------
+function getSelectedStore() {
+  return document.getElementById('storeSelect').value || '';
+}
+function getSelectedVersion() {
+  return document.getElementById('versionSelect').value || '';
+}
+
+// Current filtered set (store + version + category; click wins)
 function filteredRows() {
   let arr = RAW;
+
+  const store = getSelectedStore();
+  if (store) arr = arr.filter(r => (r.source || 'Unknown') === store);
+
+  const version = getSelectedVersion();
+  if (version) arr = arr.filter(r => String(r.app_version || 'Unknown') === version);
+
   if (clickedGroup) {
     arr = arr.filter(r => r.category === clickedGroup);
   } else if (selectedGroups.length) {
@@ -142,26 +173,39 @@ function filteredRows() {
   return arr;
 }
 
+// ---------- Summary (quick stats by store/version) ----------
+function renderSummary(rows) {
+  const byStore = new Map();
+  const byVer = new Map();
+  for (const r of rows) {
+    const s = r.source || 'Unknown';
+    const v = String(r.app_version || 'Unknown');
+    byStore.set(s, (byStore.get(s) || 0) + 1);
+    byVer.set(v, (byVer.get(v) || 0) + 1);
+  }
+  const storeTxt = Array.from(byStore.entries()).map(([k,v]) => `${k}: ${v}`).join(', ') || '—';
+  const verTxt = Array.from(byVer.entries()).map(([k,v]) => `${k}: ${v}`).join(', ') || '—';
+  document.getElementById('summary').innerHTML =
+    `<span class="kbd">Total</span> ${rows.length} &nbsp;|&nbsp; ` +
+    `<span class="kbd">By Store</span> ${storeTxt} &nbsp;|&nbsp; ` +
+    `<span class="kbd">By Version</span> ${verTxt}`;
+}
+
 // ---------- Draw chart ----------
 function drawChart() {
-  const rows = RAW;
+  const rows = filteredRows();        // chart respects Store/Version filters
   CAT_ORDER = uniq(rows.map(r => r.category).filter(Boolean)).sort();
 
-  // counts
   const counts = CAT_ORDER.map(c => rows.filter(r => r.category === c).length);
 
-  // base colors: each category gets its own color initially
   if (!Object.keys(CAT_COLOR).length) {
     CAT_COLOR = assignCategoryColors(CAT_ORDER);
   }
   let perBarColors = CAT_ORDER.map(c => CAT_COLOR[c]);
 
-  // If a bar was clicked: keep that vivid, dim others
   if (clickedGroup) {
     perBarColors = CAT_ORDER.map(c => c === clickedGroup ? CAT_COLOR[c] : rgba(CAT_COLOR[c], 0.2));
-  }
-  // Else if dropdown is used: highlight selected, dim non-selected
-  else if (selectedGroups.length) {
+  } else if (selectedGroups.length) {
     const set = new Set(selectedGroups);
     perBarColors = CAT_ORDER.map(c => set.has(c) ? CAT_COLOR[c] : rgba(CAT_COLOR[c], 0.2));
   }
@@ -183,84 +227,106 @@ function drawChart() {
 
   Plotly.newPlot('chart', data, layout, {displayModeBar:false});
 
-  // click handler
+  // click handler → selects a single category (wins over dropdown)
   const chart = document.getElementById('chart');
   chart.on('plotly_click', ev => {
     const cat = ev.points?.[0]?.x;
     if (!cat) return;
-    clickedGroup = cat;         // click wins over dropdown
-    drawChart();
-    const view = filteredRows();
-    renderTable(view);
-    document.getElementById('downloadLink').href = toCSVURI(view);
+    clickedGroup = cat;
+    refreshViews();
   });
 }
 
-// Populate category multi-select
-function fillDropdown() {
+// Populate selects
+function fillCategorySelect() {
   const sel = document.getElementById('categorySelect');
   const cats = uniq(RAW.map(r => r.category).filter(Boolean)).sort();
   sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
   sel.addEventListener('change', () => {
-    // collect selected options
     selectedGroups = Array.from(sel.selectedOptions).map(o => o.value);
-    clickedGroup = null; // dropdown overrides any prior click
-    drawChart();
-    const view = filteredRows();
-    renderTable(view);
-    document.getElementById('downloadLink').href = toCSVURI(view);
+    clickedGroup = null;
+    refreshViews();
   });
+}
+
+function fillStoreSelect() {
+  const sel = document.getElementById('storeSelect');
+  const stores = ['All Stores', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
+  sel.innerHTML = stores.map((s, i) =>
+    `<option value="${i===0 ? '' : s}">${s}</option>`
+  ).join('');
+  sel.addEventListener('change', () => {
+    // Optionally re-scope versions to selected store
+    fillVersionSelect();
+    clickedGroup = null;
+    refreshViews();
+  });
+}
+
+function fillVersionSelect() {
+  const sel = document.getElementById('versionSelect');
+  const store = getSelectedStore();
+  const scope = store ? RAW.filter(r => (r.source || 'Unknown') === store) : RAW;
+  const versions = ['All Versions', ...uniq(scope.map(r => String(r.app_version || 'Unknown'))).sort()];
+  const current = sel.value; // try to preserve selection if still valid
+  sel.innerHTML = versions.map((v, i) =>
+    `<option value="${i===0 ? '' : v}">${v}</option>`
+  ).join('');
+  if (versions.includes(current)) sel.value = current;
+  sel.addEventListener('change', () => {
+    clickedGroup = null;
+    refreshViews();
+  }, { once: true }); // attach once to avoid duplicate handlers
 }
 
 // Reset
 document.getElementById('resetBtn').addEventListener('click', () => {
   clickedGroup = null;
   selectedGroups = [];
-  const sel = document.getElementById('categorySelect');
-  Array.from(sel.options).forEach(o => (o.selected = false));
-  drawChart();                 // redraw with full colorful palette
-  renderTable([]);
-  document.getElementById('hint').textContent = 'Tip: Click a bar or select one or more categories to view reviews.';
-  document.getElementById('downloadLink').href = toCSVURI(RAW);
+  document.getElementById('categorySelect').selectedIndex = -1;
+  document.getElementById('storeSelect').value = '';
+  fillVersionSelect(); // resets version list to all
+  document.getElementById('versionSelect').value = '';
+  refreshViews(true);
 });
 
-// ---------- Load data & init ----------
-fetch(DATA_URL).then(r => r.json()).then(data => {
-  // normalize sentiments & categories
-  RAW = (data || []).map(d => ({
-    review: d.review ?? '',
-    category: (d.category ?? '').toString().trim(),
-    sentiment_std: d.sentiment_std ?? SENTI_MAP[d.sentiment] ?? d.sentiment ?? '',
-    rating: d.rating ?? '',
-    review_date: d.review_date ?? ''
-  }));
-  fillDropdown();
+// Keep UI pieces in sync
+function refreshViews(resetTableHint=false) {
   drawChart();
-  // default: no selection → download all
-  document.getElementById('downloadLink').href = toCSVURI(RAW);
-});
-  <script>
-  fetch('reviews.json?nocache=' + Date.now())
+  const view = filteredRows();
+  renderSummary(view);
+  renderTable(view);
+  document.getElementById('downloadLink').href = toCSVURI(view.length ? view : RAW);
+  if (resetTableHint && !view.length) {
+    document.getElementById('hint').textContent = 'Tip: Click a bar or select one or more categories to view reviews.';
+  }
+}
+
+// ---------- Load data & init ----------
+fetch(DATA_URL)
   .then(r => r.json())
   .then(data => {
-  // Example: split counts by store
-  const byStore = d3.rollup(data, v => v.length, d => d.source);
-  console.log('Totals by store:', Object.fromEntries(byStore));
-  
-  // If you have an existing category chart, you can filter:
-  // const filtered = data.filter(d => d.source === 'App Store'); // or 'Google Play'
-  // renderCharts(filtered);
+    RAW = (data || []).map(d => ({
+      review: d.review ?? '',
+      category: (d.category ?? '').toString().trim(),
+      sentiment_std: d.sentiment_std ?? SENTI_MAP[d.sentiment] ?? d.sentiment ?? '',
+      rating: d.rating ?? '',
+      review_date: d.review_date ?? '',
+      source: d.source || 'Unknown',             // <-- Store
+      app_version: d.app_version || 'Unknown'    // <-- Version
+    }));
+
+    fillStoreSelect();
+    fillVersionSelect();
+    fillCategorySelect();
+    refreshViews();
+    // default download = all
+    document.getElementById('downloadLink').href = toCSVURI(RAW);
+  })
+  .catch(err => {
+    console.error('Failed to load data.json', err);
+    document.getElementById('summary').textContent = 'Failed to load data.json';
   });
-  </script>
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
