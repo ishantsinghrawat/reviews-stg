@@ -122,7 +122,7 @@ jobs:
           git push || true
 
       - name: Open/Update alert issue on negative-sentiment increase
-        if: steps.compare.outputs.alert == 'true'
+        if: ${{ success() && toLower(steps.compare.outputs.alert) == 'true' }}
         uses: actions/github-script@v7
         with:
           script: |
