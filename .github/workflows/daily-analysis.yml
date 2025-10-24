@@ -42,13 +42,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build new_data.json + reviews.json (Google Play → NLP)
+      - name: Build new_data.json + reviews.json (GP + iOS → NLP, last 30 days)
         env:
+          # Google Play
           GP_PACKAGE: com.mcdonalds.superapp
           GP_COUNTRY: ca
           GP_LANG: en
-          MIN_DATE: "2025-01-01"     # optional
-          ONLY_VERSION: "9.105.3"    # optional
+          ONLY_VERSION: ""           # optional (pins both stores if set)
+
+          # App Store
+          INCLUDE_APPSTORE: "true"
+          IOS_APP_ID: "375695000"
+          IOS_COUNTRY: "ca"
+          IOS_LANG: "en"
+          IOS_ONLY_VERSION: ""       # optional (pins only iOS if set)
+
+          # Date window
+          LAST_DAYS: "30"            # <-- pull only the last month
+
+          # NLP labels & caches
           ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery,Other"
           HF_HOME: ${{ runner.temp }}/hf_home
           TRANSFORMERS_CACHE: ${{ runner.temp }}/hf_home
