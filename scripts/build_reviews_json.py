@@ -86,7 +86,7 @@ def fetch_google_play(package: str, lang: str, country: str) -> pd.DataFrame:
     df["country_code"] = country
     if "review_date" in df.columns:
         df["review_date"] = pd.to_datetime(df["review_date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    return df[:50]
+    return df[:55]
 
 # --------------------------
 # Apple RSS
