@@ -274,7 +274,6 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 function refreshViews(resetTableHint=false) {
   drawChart();
   const view = filteredRows();
-  /renderSummary(view);
   renderTable(view);
   document.getElementById('downloadLink').href = toCSVURI(view.length ? view : RAW);
   if (resetTableHint && !view.length) {
@@ -303,12 +302,13 @@ fetch(DATA_URL)
     document.getElementById('downloadLink').href = toCSVURI(RAW);
   })
   .catch(err => {
-    console.error('Failed to load data.json', err)
-    /document.getElementById('summary').textContent = 'Failed to load data.json';
+    console.error('Failed to load data.json', err);
+    document.getElementById('summary').textContent = 'Failed to load data.json';
   });
 </script>
 </body>
 </html>
+
 
 
 
