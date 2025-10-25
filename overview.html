@@ -54,17 +54,16 @@
 
   <div id="chart" style="height:420px;"></div>
   <h3>Reviews</h3>
-  <div id="hint">Tip: Click a bar or select one or more categories to view reviews.</div>
+  <div id="hint">Tip: Click a bar (any sentiment) or select one or more categories to view reviews.</div>
   <div id="table"></div>
 
 <script>
-const DATA_URL = 'data.json'; // ← your site uses data.json
+const DATA_URL = 'data.json';
 
 let RAW = [];
 let clickedGroup = null;      // category chosen by clicking chart
 let selectedGroups = [];      // categories chosen via multi-select
 let CAT_ORDER = [];           // sorted category list
-let CAT_COLOR = {};           // category -> base color
 
 const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negative',
                     'neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral',
@@ -73,28 +72,7 @@ const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negat
 const fmtDate = s => !s ? '' : (s.length > 10 ? s.slice(0,10) : s);
 const uniq = arr => Array.from(new Set(arr));
 
-function rgba(hex, a=1){
-  const h = (hex || '#cccccc').replace('#','');
-  const bigint = parseInt(h, 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-  return `rgba(${r},${g},${b},${a})`;
-}
-
-function assignCategoryColors(cats){
-  const d3 = Plotly.d3;
-  const palettes = [
-    (d3 && d3.schemeCategory10) || ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'],
-    (d3 && d3.schemeSet3) || ['#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9','#bc80bd','#ccebc5','#ffed6f']
-  ];
-  const flat = palettes.flat();
-  const colors = {};
-  cats.forEach((c, i) => { colors[c] = flat[i % flat.length]; });
-  return colors;
-}
-
-// ---------- CSV download helper (now includes Store & Version) ----------
+/* ---------- CSV download (includes Store & Version) ---------- */
 function toCSVURI(rows) {
   if (!rows.length) return 'data:text/csv;charset=utf-8,';
   const cols = ['review','category','sentiment_std','rating','review_date','source','app_version'];
@@ -110,7 +88,7 @@ function toCSVURI(rows) {
   return 'data:text/csv;charset=utf-8,' + [header, body].join('\n');
 }
 
-// ---------- Table render (now shows Store & Version) ----------
+/* ---------- Table render (shows Store & Version) ---------- */
 function renderTable(rows, maxRows=1000) {
   const tbl = document.getElementById('table');
   const hint = document.getElementById('hint');
@@ -118,7 +96,7 @@ function renderTable(rows, maxRows=1000) {
     tbl.innerHTML = '';
     hint.textContent = clickedGroup || selectedGroups.length
       ? 'No reviews match the current selection.'
-      : 'Tip: Click a bar or select one or more categories to view reviews.';
+      : 'Tip: Click a bar (any sentiment) or select categories to view reviews.';
     return;
   }
   hint.textContent = '';
@@ -146,7 +124,7 @@ function renderTable(rows, maxRows=1000) {
   tbl.innerHTML = html;
 }
 
-// ---------- Filters ----------
+/* ---------- Filters ---------- */
 function getSelectedStore() {
   return document.getElementById('storeSelect').value || '';
 }
@@ -154,7 +132,7 @@ function getSelectedVersion() {
   return document.getElementById('versionSelect').value || '';
 }
 
-// Current filtered set (store + version + category; click wins)
+/* Current filtered set (store + version + category; click wins) */
 function filteredRows() {
   let arr = RAW;
 
@@ -173,7 +151,7 @@ function filteredRows() {
   return arr;
 }
 
-// ---------- Summary (quick stats by store/version) ----------
+/* ---------- Summary ---------- */
 function renderSummary(rows) {
   const byStore = new Map();
   const byVer = new Map();
@@ -191,43 +169,46 @@ function renderSummary(rows) {
     `<span class="kbd">By Version</span> ${verTxt}`;
 }
 
-// ---------- Draw chart ----------
+/* ---------- Draw chart: grouped bars by sentiment ---------- */
 function drawChart() {
-  const rows = filteredRows();        // chart respects Store/Version filters
+  const rows = filteredRows();                     // chart respects filters
   CAT_ORDER = uniq(rows.map(r => r.category).filter(Boolean)).sort();
 
-  const counts = CAT_ORDER.map(c => rows.filter(r => r.category === c).length);
-
-  if (!Object.keys(CAT_COLOR).length) {
-    CAT_COLOR = assignCategoryColors(CAT_ORDER);
-  }
-  let perBarColors = CAT_ORDER.map(c => CAT_COLOR[c]);
-
-  if (clickedGroup) {
-    perBarColors = CAT_ORDER.map(c => c === clickedGroup ? CAT_COLOR[c] : rgba(CAT_COLOR[c], 0.2));
-  } else if (selectedGroups.length) {
-    const set = new Set(selectedGroups);
-    perBarColors = CAT_ORDER.map(c => set.has(c) ? CAT_COLOR[c] : rgba(CAT_COLOR[c], 0.2));
+  // Build counts per (category, sentiment)
+  const sentiments = ['Positive','Neutral','Negative'];
+  const buckets = new Map(); // key: category|sentiment -> count
+  for (const r of rows) {
+    const c = r.category || '';
+    const s = (r.sentiment_std && SENTI_MAP[r.sentiment_std]) ? SENTI_MAP[r.sentiment_std] : (SENTI_MAP[r.sentiment_std] || r.sentiment_std || '');
+    const S = SENTI_MAP[s] || s; // normalize
+    if (!c || !S) continue;
+    const key = c + '|' + S;
+    buckets.set(key, (buckets.get(key) || 0) + 1);
   }
 
-  const data = [{
-    x: CAT_ORDER,
-    y: counts,
-    type: 'bar',
-    marker: { color: perBarColors },
-    hovertemplate: 'Category=%{x}<br>Count=%{y}<extra></extra>'
-  }];
+  // y arrays per sentiment in CAT_ORDER
+  const yPos = CAT_ORDER.map(c => buckets.get(c+'|Positive') || 0);
+  const yNeu = CAT_ORDER.map(c => buckets.get(c+'|Neutral')  || 0);
+  const yNeg = CAT_ORDER.map(c => buckets.get(c+'|Negative') || 0);
+
+  const traces = [
+    { name:'Positive', x: CAT_ORDER, y: yPos, type:'bar', marker:{ color:'#2ca02c' }, hovertemplate:'Category=%{x}<br>Positive=%{y}<extra></extra>' },
+    { name:'Neutral',  x: CAT_ORDER, y: yNeu, type:'bar', marker:{ color:'#7f7f7f' }, hovertemplate:'Category=%{x}<br>Neutral=%{y}<extra></extra>' },
+    { name:'Negative', x: CAT_ORDER, y: yNeg, type:'bar', marker:{ color:'#d62728' }, hovertemplate:'Category=%{x}<br>Negative=%{y}<extra></extra>' },
+  ];
 
   const layout = {
-    title: 'Topics vs Count',
+    title: 'Reviews by Category & Sentiment',
+    barmode: 'group', // change to 'stack' if you prefer stacked bars
     margin: {l:40,r:10,t:50,b:80},
     xaxis: { title: "Review Category" },
     yaxis: { title: "Count of Reviews" },
+    legend: { orientation:'h', x:0, y:1.14 }
   };
 
-  Plotly.newPlot('chart', data, layout, {displayModeBar:false});
+  Plotly.newPlot('chart', traces, layout, {displayModeBar:false});
 
-  // click handler → selects a single category (wins over dropdown)
+  // clicking any bar selects that category (regardless of sentiment trace)
   const chart = document.getElementById('chart');
   chart.on('plotly_click', ev => {
     const cat = ev.points?.[0]?.x;
@@ -237,7 +218,7 @@ function drawChart() {
   });
 }
 
-// Populate selects
+/* ---------- Populate selects ---------- */
 function fillCategorySelect() {
   const sel = document.getElementById('categorySelect');
   const cats = uniq(RAW.map(r => r.category).filter(Boolean)).sort();
@@ -256,7 +237,6 @@ function fillStoreSelect() {
     `<option value="${i===0 ? '' : s}">${s}</option>`
   ).join('');
   sel.addEventListener('change', () => {
-    // Optionally re-scope versions to selected store
     fillVersionSelect();
     clickedGroup = null;
     refreshViews();
@@ -268,7 +248,7 @@ function fillVersionSelect() {
   const store = getSelectedStore();
   const scope = store ? RAW.filter(r => (r.source || 'Unknown') === store) : RAW;
   const versions = ['All Versions', ...uniq(scope.map(r => String(r.app_version || 'Unknown'))).sort()];
-  const current = sel.value; // try to preserve selection if still valid
+  const current = sel.value;
   sel.innerHTML = versions.map((v, i) =>
     `<option value="${i===0 ? '' : v}">${v}</option>`
   ).join('');
@@ -276,21 +256,21 @@ function fillVersionSelect() {
   sel.addEventListener('change', () => {
     clickedGroup = null;
     refreshViews();
-  }, { once: true }); // attach once to avoid duplicate handlers
+  }, { once: true });
 }
 
-// Reset
+/* ---------- Reset ---------- */
 document.getElementById('resetBtn').addEventListener('click', () => {
   clickedGroup = null;
   selectedGroups = [];
   document.getElementById('categorySelect').selectedIndex = -1;
   document.getElementById('storeSelect').value = '';
-  fillVersionSelect(); // resets version list to all
+  fillVersionSelect();
   document.getElementById('versionSelect').value = '';
   refreshViews(true);
 });
 
-// Keep UI pieces in sync
+/* ---------- Sync UI ---------- */
 function refreshViews(resetTableHint=false) {
   drawChart();
   const view = filteredRows();
@@ -298,11 +278,11 @@ function refreshViews(resetTableHint=false) {
   renderTable(view);
   document.getElementById('downloadLink').href = toCSVURI(view.length ? view : RAW);
   if (resetTableHint && !view.length) {
-    document.getElementById('hint').textContent = 'Tip: Click a bar or select one or more categories to view reviews.';
+    document.getElementById('hint').textContent = 'Tip: Click a bar (any sentiment) or select categories to view reviews.';
   }
 }
 
-// ---------- Load data & init ----------
+/* ---------- Load data & init ---------- */
 fetch(DATA_URL)
   .then(r => r.json())
   .then(data => {
@@ -312,15 +292,14 @@ fetch(DATA_URL)
       sentiment_std: d.sentiment_std ?? SENTI_MAP[d.sentiment] ?? d.sentiment ?? '',
       rating: d.rating ?? '',
       review_date: d.review_date ?? '',
-      source: d.source || 'Unknown',             // <-- Store
-      app_version: d.app_version || 'Unknown'    // <-- Version
+      source: d.source || 'Unknown',
+      app_version: d.app_version || 'Unknown'
     }));
 
     fillStoreSelect();
     fillVersionSelect();
     fillCategorySelect();
     refreshViews();
-    // default download = all
     document.getElementById('downloadLink').href = toCSVURI(RAW);
   })
   .catch(err => {
