@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Daily Alerts</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+    .navbar a { margin-right:10px; }
+    .toolbar { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin: 10px 0 16px; }
+    select { min-width: 240px; padding: 6px; }
+    .meta { color:#555; margin: 6px 0 14px; }
+    .panel { padding: 12px 14px; background: #f6f7f9; border-radius: 10px; }
+    #report { margin-top: 14px; }
+    .muted { color:#777; }
+    .error { color:#b00020; }
+    .banner { background:#e8f0fe; border:1px solid #c6dafc; border-radius:8px; padding:10px 14px; margin:10px 0 20px; color:#1a73e8; font-weight:500; display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; }
+    .actions { display:flex; gap:8px; flex-wrap: wrap; }
+    .btn { appearance:none; border:1px solid #c6dafc; background:#1a73e8; color:white; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600; text-decoration:none; }
+    .btn.secondary { background:#f6f7f9; color:#1a73e8; border-color:#c6dafc; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .frame { border:1px solid #eee; border-radius:10px; width:100%; min-height:60vh; }
+  </style>
+</head>
+<body>
+
+  <div class="navbar" style="margin-bottom:10px;">
+    <a href="index.html">🏠 Home</a>
+    <a href="home.html">🌍 Topic Clusters</a>
+    <a href="overview.html">✍ Topics Overview</a>
+    <a href="sentiment.html">🙂 Sentiments</a>
+    <a href="review_trend.html">📈 Review Trends</a>
+    <a href="rating_distribution.html">📊 Rating Distribution</a>
+    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+    <a href="alerts.html"><b>🚨 Daily Alerts</b></a>
+  </div>
+
+  <h1>🚨 Daily Alert Reports</h1>
+
+  <div id="latestBanner" class="banner">
+    <span id="latestText">📅 Loading latest report info…</span>
+    <div class="actions">
+      <a id="latestOpen" class="btn" href="#" target="_blank" rel="noopener" disabled>Open latest</a>
+      <button id="latestJump" class="btn secondary" disabled>Jump to embedded</button>
+      <button id="latestCopy" class="btn secondary" disabled>Copy link</button>
+    </div>
+  </div>
+
+  <div class="toolbar panel">
+    <div>
+      <label for="reportSelect"><strong>Select report</strong></label>
+      <select id="reportSelect"></select>
+    </div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <div id="empty" class="muted"></div>
+  <iframe id="report" class="frame"></iframe>
+
+<script>
+const INDEX_URL = 'reports/index.json';
+const reportSelect = document.getElementById('reportSelect');
+const meta = document.getElementById('meta');
+const empty = document.getElementById('empty');
+const frame = document.getElementById('report');
+const latestText = document.getElementById('latestText');
+const latestOpen = document.getElementById('latestOpen');
+const latestJump = document.getElementById('latestJump');
+const latestCopy = document.getElementById('latestCopy');
+
+let REPORTS = [];
+
+function setHTML(el, html) { el.innerHTML = html; }
+function esc(s) { return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+async function loadIndex() {
+  try {
+    const r = await fetch(INDEX_URL + '?nocache=' + Date.now());
+    if (!r.ok) throw new Error(`index not found`);
+    REPORTS = await r.json() || [];
+
+    if (!REPORTS.length) {
+      setHTML(latestText, '📅 No reports generated yet.');
+      latestOpen.disabled = latestJump.disabled = latestCopy.disabled = true;
+      setHTML(empty, 'No reports published yet.');
+      return;
+    }
+
+    const latest = REPORTS[0];
+    setHTML(latestText, `📅 <strong>Latest report generated on ${latest.date}</strong>`);
+    latestOpen.href = latest.path;
+    latestOpen.disabled = latestJump.disabled = latestCopy.disabled = false;
+
+    latestJump.onclick = (e) => {
+      e.preventDefault();
+      reportSelect.value = '0';
+      showReport(0).then(() => {
+        frame.scrollIntoView({ behavior: 'smooth' });
+      });
+    };
+    latestCopy.onclick = async (e) => {
+      e.preventDefault();
+      const abs = new URL(latest.path, window.location.href).href;
+      try { await navigator.clipboard.writeText(abs); latestCopy.textContent = 'Copied!'; }
+      catch { latestCopy.textContent = 'Copy failed'; }
+      setTimeout(() => latestCopy.textContent = 'Copy link', 1200);
+    };
+
+    reportSelect.innerHTML = REPORTS.map((x, i) =>
+      `<option value="${i}">${x.date}</option>`
+    ).join('');
+    reportSelect.addEventListener('change', () => {
+      const i = parseInt(reportSelect.value, 10);
+      if (!isNaN(i)) showReport(i);
+    });
+    reportSelect.value = '0';
+    await showReport(0);
+  } catch (e) {
+    setHTML(latestText, `⚠️ <span class="error">Failed to load report index: ${esc(e.message)}</span>`);
+    setHTML(empty, `<span class="error">Failed to load report index.</span>`);
+    latestOpen.disabled = latestJump.disabled = latestCopy.disabled = true;
+  }
+}
+
+async function showReport(i) {
+  const item = REPORTS[i];
+  if (!item) return;
+  empty.textContent = '';
+  meta.textContent = `Showing report for ${item.date}`;
+  // Load the HTML report in an iframe
+  frame.src = item.path + '?nocache=' + Date.now();
+}
+
+loadIndex();
+</script>
+</body>
+</html>
