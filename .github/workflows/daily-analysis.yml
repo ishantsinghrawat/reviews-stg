@@ -101,26 +101,27 @@ jobs:
           else
             echo "No report produced."
           fi
-      - name: Publish alert report to docs/reports (HTML)
+
+      # ✅ Publish reports directly to /reports (root)
+      - name: Publish alert report to reports (HTML)
         run: |
           set -e
-          mkdir -p docs/reports
+          mkdir -p reports
           DATE_UTC="$(date -u +%F)"
 
-          # Keep raw MD (optional for history)
-          cp delta_report.md "docs/reports/${DATE_UTC}.md"
+          # Keep markdown version
+          cp delta_report.md "reports/${DATE_UTC}.md"
 
-          # Render to HTML (site will load this)
-          python3 scripts/render_report.py delta_report.md "docs/reports/${DATE_UTC}.html"
+          # Render HTML version
+          python3 scripts/render_report.py delta_report.md "reports/${DATE_UTC}.html"
 
-          # Rebuild index.json to point at .html files
+          # Rebuild index.json (for alerts.html)
           python3 scripts/build_reports_index.py
 
-          # Ensure GH Pages serves as-is
-          echo > docs/.nojekyll
+          # Ensure GitHub Pages serves all files as-is
+          echo > .nojekyll
 
-          git add docs/reports docs/.nojekyll || true
-
+          git add reports .nojekyll || true
 
       # Promote AFTER compare; replace only if file content differs
       - name: Promote new_data.json → data.json (if different)
