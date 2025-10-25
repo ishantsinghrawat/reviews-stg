@@ -3,19 +3,20 @@ import os
 import json
 import glob
 
-os.makedirs("docs/reports", exist_ok=True)
+REPORT_DIR = "docs/reports"
+os.makedirs(REPORT_DIR, exist_ok=True)
 
 items = []
-for p in glob.glob("docs/reports/*.md"):
+for p in glob.glob(os.path.join(REPORT_DIR, "*.html")):
     fn = os.path.basename(p)
-    if fn.lower() == "index.md":
+    if fn.lower() == "index.html":
         continue
-    date = fn[:-3]  # strip .md
+    date = fn[:-5]  # strip .html
     items.append({"date": date, "path": f"reports/{fn}"})
 
 items.sort(key=lambda x: x["date"], reverse=True)
 
-with open("docs/reports/index.json", "w", encoding="utf-8") as f:
+with open(os.path.join(REPORT_DIR, "index.json"), "w", encoding="utf-8") as f:
     json.dump(items, f, ensure_ascii=False, indent=2)
 
 print(f"Wrote index with {len(items)} entries")
