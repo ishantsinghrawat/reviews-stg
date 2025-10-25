@@ -152,22 +152,22 @@ function filteredRows() {
 }
 
 /* ---------- Summary ---------- */
-function renderSummary(rows) {
-  const byStore = new Map();
-  const byVer = new Map();
-  for (const r of rows) {
-    const s = r.source || 'Unknown';
-    const v = String(r.app_version || 'Unknown');
-    byStore.set(s, (byStore.get(s) || 0) + 1);
-    byVer.set(v, (byVer.get(v) || 0) + 1);
-  }
-  const storeTxt = Array.from(byStore.entries()).map(([k,v]) => `${k}: ${v}`).join(', ') || '—';
-  const verTxt = Array.from(byVer.entries()).map(([k,v]) => `${k}: ${v}`).join(', ') || '—';
-  document.getElementById('summary').innerHTML =
-    `<span class="kbd">Total</span> ${rows.length} &nbsp;|&nbsp; ` +
-    `<span class="kbd">By Store</span> ${storeTxt} &nbsp;|&nbsp; ` +
-    `<span class="kbd">By Version</span> ${verTxt}`;
-}
+// function renderSummary(rows) {
+//   const byStore = new Map();
+//   const byVer = new Map();
+//   for (const r of rows) {
+//     const s = r.source || 'Unknown';
+//     const v = String(r.app_version || 'Unknown');
+//     byStore.set(s, (byStore.get(s) || 0) + 1);
+//     byVer.set(v, (byVer.get(v) || 0) + 1);
+//   }
+//   const storeTxt = Array.from(byStore.entries()).map(([k,v]) => `${k}: ${v}`).join(', ') || '—';
+//   const verTxt = Array.from(byVer.entries()).map(([k,v]) => `${k}: ${v}`).join(', ') || '—';
+//   document.getElementById('summary').innerHTML =
+//     `<span class="kbd">Total</span> ${rows.length} &nbsp;|&nbsp; ` +
+//     `<span class="kbd">By Store</span> ${storeTxt} &nbsp;|&nbsp; ` +
+//     `<span class="kbd">By Version</span> ${verTxt}`;
+// }
 
 /* ---------- Draw chart: grouped bars by sentiment ---------- */
 function drawChart() {
@@ -309,3 +309,4 @@ fetch(DATA_URL)
 </script>
 </body>
 </html>
+
