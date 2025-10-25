@@ -101,16 +101,26 @@ jobs:
           else
             echo "No report produced."
           fi
-
-      # Publish report to docs/reports/YYYY-MM-DD.md and update index.json for alerts.html
-      - name: Publish alert report to docs/reports
+      - name: Publish alert report to docs/reports (HTML)
         run: |
           set -e
           mkdir -p docs/reports
           DATE_UTC="$(date -u +%F)"
+
+          # Keep raw MD (optional for history)
           cp delta_report.md "docs/reports/${DATE_UTC}.md"
+
+          # Render to HTML (site will load this)
+          python3 scripts/render_report.py delta_report.md "docs/reports/${DATE_UTC}.html"
+
+          # Rebuild index.json to point at .html files
           python3 scripts/build_reports_index.py
-          git add docs/reports || true
+
+          # Ensure GH Pages serves as-is
+          echo > docs/.nojekyll
+
+          git add docs/reports docs/.nojekyll || true
+
 
       # Promote AFTER compare; replace only if file content differs
       - name: Promote new_data.json → data.json (if different)
