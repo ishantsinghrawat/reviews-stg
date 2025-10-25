@@ -1,118 +1,15 @@
-name: Daily review analysis (Google Play) → JSON + alert
+- name: Publish alert report to docs/reports
+  run: |
+    set -e
+    mkdir -p docs/reports
+    DATE_UTC="$(date -u +%F)"
+    cp delta_report.md "docs/reports/${DATE_UTC}.md"
 
-on:
-  schedule:
-    - cron: "0 11 * * *"     # 11:00 UTC daily (07:00 Toronto during EDT)
-  workflow_dispatch: {}
+    python3 - <<'PY'
+import os
+import json
+import glob
 
-permissions:
-  contents: write
-  issues: write
-
-jobs:
-  run-analysis:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Cache Hugging Face
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: ${{ runner.os }}-hf-${{ hashFiles('scripts/build_reviews_json.py') }}
-          restore-keys: |
-            ${{ runner.os }}-hf-
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      # BUILD: produce only new_data.json (and optional reviews.json). Do NOT overwrite data.json here.
-      - name: Build new_data.json (GP + iOS → NLP, last 30 days)
-        env:
-          # Google Play
-          GP_PACKAGE: com.mcdonalds.superapp
-          GP_COUNTRY: ca
-          GP_LANG: en
-          ONLY_VERSION: ""           # optional (pins both stores if set)
-
-          # App Store
-          INCLUDE_APPSTORE: "true"
-          IOS_APP_ID: "375695000"
-          IOS_COUNTRY: "ca"
-          IOS_LANG: "en"
-          IOS_ONLY_VERSION: ""       # optional (pins only iOS if set)
-
-          # Date window
-          LAST_DAYS: "30"            # pull only the last month
-
-          # NLP labels & caches
-          ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery"
-          HF_HOME: ${{ runner.temp }}/hf_home
-          TRANSFORMERS_CACHE: ${{ runner.temp }}/hf_home
-          HF_HUB_DISABLE_SYMLINKS: "1"
-          HF_HUB_DISABLE_TELEMETRY: 1
-          TOKENIZERS_PARALLELISM: false
-        run: |
-          python scripts/build_reviews_json.py \
-            --out-new new_data.json \
-            --out-reviews reviews.json   # optional artifact for inspection
-
-      # Ensure baseline exists so compare can always run
-      - name: Ensure baseline data.json exists
-        run: |
-          [[ -f data.json ]] || echo "[]" > data.json
-
-      - name: Compare negative sentiment vs current data.json
-        id: compare
-        run: |
-          python scripts/compare_negatives.py \
-            --current data.json \
-            --new new_data.json \
-            --report delta_report.md \
-            --threshold-abs 1 \
-            --threshold-rel 0.1
-
-      - name: Debug compare outputs
-        run: |
-          echo "compare.alert   = '${{ steps.compare.outputs.alert }}'"
-          echo "compare.updated = '${{ steps.compare.outputs.updated }}'"
-
-      - name: Show report (always)
-        if: always()
-        run: |
-          if [ -f delta_report.md ]; then
-            echo "---- delta_report.md ----"
-            cat delta_report.md
-          else
-            echo "No report produced."
-          fi
-
-      # Publish report to docs/reports/YYYY-MM-DD.md and update index.json for alerts.html
-      - name: Publish alert report to docs/reports
-        run: |
-          set -e
-          mkdir -p docs/reports
-          DATE_UTC="$(date -u +%F)"
-          cp delta_report.md "docs/reports/${DATE_UTC}.md"
-
-          python - <<'PY'
-import os, json, glob
 os.makedirs("docs/reports", exist_ok=True)
 items = []
 for p in glob.glob("docs/reports/*.md"):
@@ -126,59 +23,5 @@ with open("docs/reports/index.json", "w", encoding="utf-8") as f:
     json.dump(items, f, ensure_ascii=False, indent=2)
 print(f"Wrote index with {len(items)} entries")
 PY
-          git add docs/reports || true
 
-      # Promote AFTER compare; replace only if file content differs
-      - name: Promote new_data.json → data.json (if different)
-        run: |
-          set -e
-          if [ -f new_data.json ]; then
-            if [ ! -f data.json ] || ! cmp -s new_data.json data.json; then
-              echo "Replacing data.json with new_data.json"
-              mv new_data.json data.json
-              git add data.json || true
-            else
-              echo "data.json unchanged; removing new_data.json."
-              rm -f new_data.json
-            fi
-          else
-            echo "new_data.json not found; skipping promote."
-          fi
-
-      - name: Commit site artifacts (data.json + reports)
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --cached --quiet && echo "No changes to commit." || git commit -m "chore: refresh data & publish daily report"
-          git push || true
-
-      - name: Create daily alert issue (new per day)
-        if: ${{ success() && fromJSON(steps.compare.outputs.alert) }}
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const today = new Date().toISOString().slice(0,10); // YYYY-MM-DD
-            const title = `🚨 Negative sentiment increase — ${today}`;
-            const report = fs.readFileSync('delta_report.md', 'utf8');
-            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
-            const body = `${report}\n\n---\n**Workflow run:** ${runUrl}\n**Run #** ${context.runNumber}`;
-
-            // One issue per day; comment if already exists today
-            const { data: issues } = await github.rest.issues.listForRepo({
-              owner, repo, state: 'open', per_page: 100
-            });
-            const existing = issues.find(i => i.title === title);
-            if (existing) {
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: existing.number, body
-              });
-            } else {
-              await github.rest.issues.create({
-                owner, repo, title, body,
-                labels: ['alert','sentiment','daily']
-              });
-            }
+    git add docs/reports || true
