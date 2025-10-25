@@ -3,7 +3,7 @@ import os
 import json
 import glob
 
-REPORT_DIR = "docs/reports"
+REPORT_DIR = "reports/"
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 items = []
