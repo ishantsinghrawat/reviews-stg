@@ -7,6 +7,7 @@
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+    .navbar a { margin-right: 8px; text-decoration: none; }
     .toolbar { display:flex; align-items:center; gap:10px; margin: 8px 0 12px; flex-wrap: wrap; }
     select { min-width: 240px; padding: 6px; }
     button { padding:8px 12px; border:0; border-radius:8px; background:#f2f3f5; cursor:pointer; }
@@ -18,81 +19,6 @@
     th { text-align: left; }
     td.center, th.center { text-align: center; }
     #hint { color:#666; font-style: italic; }
-    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#f5f5f7; padding:2px 6px; border-radius:6px; }
-
-    /* --- Floating banner (toast) --- */
-    .toast {
-      position: fixed;
-      top: 16px;
-      left: 50%;
-      transform: translateX(-50%) translateY(-12px);
-      min-width: 300px;
-      max-width: min(92vw, 820px);
-      background: #111827;   /* near-black */
-      color: #fff;
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.2);
-      padding: 10px 16px 14px;
-      z-index: 9999;
-      opacity: 0;
-      pointer-events: none;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      transition: opacity .2s ease, transform .2s ease;
-    }
-    .toast--show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-      pointer-events: auto;
-    }
-    .toast__wrap { display:flex; flex-direction:column; gap:6px; }
-    .toast__line { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    .toast__pill {
-      font-size: 12px;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: #374151;
-      white-space: nowrap;
-    }
-    .toast__pill--pos { background: #166534; }  /* green-800 */
-    .toast__pill--neu { background: #4b5563; }  /* gray-600 */
-    .toast__pill--neg { background: #7f1d1d; }  /* red-900 */
-    .toast__text { font-size: 14px; line-height: 1.35; }
-    .toast__close {
-      margin-left: auto;
-      background: transparent;
-      border: 0;
-      color: #d1d5db;
-      font-size: 18px;
-      line-height: 1;
-      cursor: pointer;
-    }
-    .toast__close:hover { color: #fff; }
-
-    /* PROGRESS BAR: smaller height (2px) */
-    .toast__bar { width: 100%; height: 2px; background: #374151; border-radius: 999px; overflow: hidden; }
-    .toast__bar-inner {
-      height: 100%;
-      width: 100%;
-      background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444);
-      transform-origin: left center;
-      transform: scaleX(1);
-      transition: transform .05s linear;
-    }
-
-    /* selection chips inside toast */
-    .selchip {
-      background: #1f2937;
-      border: 1px solid #334155;
-      color: #e5e7eb;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      display:inline-flex; gap:6px; align-items:center;
-    }
-    .selchip b { font-weight:700; }
   </style>
 </head>
 <body>
@@ -124,94 +50,26 @@
     <a id="downloadLink" class="btn" download="reviews_overview.csv" href="#">Download Reviews</a>
   </div>
 
-  <div id="summary" style="margin:8px 0 16px; color:#333;"></div>
-
   <div id="chart" style="height:420px;"></div>
   <h3>Reviews</h3>
   <div id="hint">Tip: Click a bar (category + sentiment). Single-click replaces; <b>Ctrl/Cmd-click</b> adds/removes. Click again to toggle.</div>
   <div id="table"></div>
 
-  <!-- Floating banner element -->
-  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true">
-    <div class="toast__wrap">
-      <div class="toast__line">
-        <span id="toastLabel" class="toast__pill">Selected</span>
-        <div id="toastText" class="toast__text"></div>
-        <button id="toastClose" class="toast__close" aria-label="Dismiss notification">×</button>
-      </div>
-      <div id="toastSelections" class="toast__line"></div>
-      <div class="toast__bar"><div id="toastBar" class="toast__bar-inner"></div></div>
-    </div>
-  </div>
-
 <script>
 const DATA_URL = 'data.json';
 
 let RAW = [];
-let selectedGroups = [];      // dropdown multi-select
-let CAT_ORDER = [];           // based on store/version scope ONLY
-
-// Multi-bar selection: array of {cat, sent}
-let clickedPairs = [];        // [{cat:'Login', sent:'Negative'}, ...]
-
-// toast timers
-let toastTimer = null;
-let toastInterval = null;
-const TOAST_MS = 5000;
+let CAT_ORDER = [];              // based on store/version scope ONLY
+let selectedGroups = [];         // dropdown multi-select
+let clickedPairs = [];           // [{cat:'Login', sent:'Negative'}, ...]
 
 const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negative',
                     'neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral',
                     'positive':'Positive','POSITIVE':'Positive','LABEL_2':'Positive' };
 
+/* ---------- Utils ---------- */
 const fmtDate = s => !s ? '' : (s.length > 10 ? s.slice(0,10) : s);
 const uniq = arr => Array.from(new Set(arr));
-
-/* ---------- Toast helpers ---------- */
-function sentimentPillText(total) {
-  if (total > 1) return `${total} selections`;
-  return 'Selected';
-}
-function showToast() {
-  const el = document.getElementById('toast');
-  const label = document.getElementById('toastLabel');
-  const text = document.getElementById('toastText');
-  const bag = document.getElementById('toastSelections');
-  const bar = document.getElementById('toastBar');
-
-  label.textContent = sentimentPillText(clickedPairs.length);
-  text.innerHTML = clickedPairs.length
-    ? `Showing reviews for the selections below. <span style="opacity:.8">Single-click replaces; <b>Ctrl/Cmd-click</b> adds/removes.</span>`
-    : `No selection.`;
-
-  bag.innerHTML = clickedPairs.map(({cat, sent}) =>
-    `<span class="selchip"><b>${sent}</b> • ${cat}</span>`
-  ).join(' ');
-
-  el.classList.add('toast--show');
-  el.setAttribute('aria-hidden', 'false');
-
-  if (toastTimer) clearTimeout(toastTimer);
-  if (toastInterval) clearInterval(toastInterval);
-  bar.style.transform = 'scaleX(1)';
-  const start = Date.now();
-
-  toastInterval = setInterval(() => {
-    const elapsed = Date.now() - start;
-    const frac = Math.max(0, 1 - (elapsed / TOAST_MS));
-    bar.style.transform = `scaleX(${frac})`;
-    if (frac <= 0) clearInterval(toastInterval);
-  }, 50);
-
-  toastTimer = setTimeout(hideToast, TOAST_MS);
-}
-function hideToast() {
-  const el = document.getElementById('toast');
-  el.classList.remove('toast--show');
-  el.setAttribute('aria-hidden', 'true');
-  if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
-  if (toastInterval) { clearInterval(toastInterval); toastInterval = null; }
-}
-document.getElementById('toastClose').addEventListener('click', hideToast);
 
 /* ---------- CSV download ---------- */
 function toCSVURI(rows) {
@@ -265,7 +123,7 @@ function renderTable(rows, maxRows=1000) {
   tbl.innerHTML = html;
 }
 
-/* ---------- Store/version scope for CHART (keep full view) ---------- */
+/* ---------- Selected store/version (chart scope only) ---------- */
 function getSelectedStore(){ return document.getElementById('storeSelect').value || ''; }
 function getSelectedVersion(){ return document.getElementById('versionSelect').value || ''; }
 
@@ -278,7 +136,7 @@ function rowsForChartScope() {
   return arr;
 }
 
-/* ---------- TABLE rows (clickedPairs union > multi-select) ---------- */
+/* ---------- Table rows (clickedPairs union > dropdown) ---------- */
 function rowsForTable() {
   let arr = rowsForChartScope();
 
@@ -298,7 +156,16 @@ function rowsForTable() {
   return arr;
 }
 
-/* ---------- Highlight/dim the chart ---------- */
+/* ---------- Category dropdown highlight from bar clicks ---------- */
+function syncCategorySelectFromPairs() {
+  const sel = document.getElementById('categorySelect');
+  const set = new Set(clickedPairs.map(p => p.cat));
+  for (const opt of sel.options) {
+    opt.selected = set.has(opt.value);
+  }
+}
+
+/* ---------- Chart: highlight/dim ----------- */
 function applyHighlight() {
   const chart = document.getElementById('chart');
   if (!chart || !chart.data) return;
@@ -307,14 +174,14 @@ function applyHighlight() {
   const selectedKeys = new Set(clickedPairs.map(p => `${p.cat}|${p.sent}`));
   const opacities = sentiments.map(sent =>
     CAT_ORDER.map(cat => {
-      if (!clickedPairs.length) return 1.0;                    // no dimming
-      return selectedKeys.has(`${cat}|${sent}`) ? 1.0 : 0.15;  // dim others
+      if (!clickedPairs.length) return 1.0;               // no dimming
+      return selectedKeys.has(`${cat}|${sent}`) ? 1.0 : 0.15;
     })
   );
   Plotly.restyle(chart, { 'marker.opacity': [opacities[0], opacities[1], opacities[2]] });
 }
 
-/* ---------- Chart (only changes on store/version) ---------- */
+/* ---------- Chart draw (only on store/version changes) ---------- */
 function drawChart() {
   const rows = rowsForChartScope();
   CAT_ORDER = uniq(rows.map(r => r.category).filter(Boolean)).sort();
@@ -352,22 +219,7 @@ function drawChart() {
   });
 }
 
-/* ---------- Sync Category dropdown HIGHLIGHT from bar clicks ---------- */
-function syncCategorySelectFromPairs() {
-  const sel = document.getElementById('categorySelect');
-  const set = new Set(clickedPairs.map(p => p.cat));
-  for (const opt of sel.options) {
-    opt.selected = set.has(opt.value);
-    // optional: auto-scroll first selected into view
-    if (opt.selected && sel.selectedOptions.length === 1) {
-      const optEl = opt;
-      sel.scrollTop = optEl.offsetTop - 40;
-    }
-  }
-  // Keep selectedGroups in sync only for highlighting (no filtering change here)
-}
-
-/* ---------- Click handler: multi-select with Ctrl/Cmd ---------- */
+/* ---------- Chart click: multi-select with Ctrl/Cmd ---------- */
 function wireClickHandler() {
   const chart = document.getElementById('chart');
   chart.removeAllListeners?.('plotly_click');
@@ -385,19 +237,17 @@ function wireClickHandler() {
       if (idx >= 0) clickedPairs.splice(idx, 1);
       else clickedPairs.push({ cat, sent });
     } else {
-      if (idx >= 0 && clickedPairs.length === 1) clickedPairs = [];
-      else clickedPairs = [{ cat, sent }];
+      if (idx >= 0 && clickedPairs.length === 1) {
+        clickedPairs = [];
+      } else {
+        clickedPairs = [{ cat, sent }];
+      }
     }
 
-    if (clickedPairs.length) {
-      showToast();
-    } else {
-      hideToast();
-    }
-
-    // HIGHLIGHT the category dropdown to reflect bar selections
+    // Reflect clicked categories in the dropdown
     syncCategorySelectFromPairs();
 
+    // Update views without redrawing the chart
     refreshViews({ skipChart: true });
   });
 }
@@ -409,8 +259,7 @@ function fillCategorySelect() {
   sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
   sel.addEventListener('change', () => {
     selectedGroups = Array.from(sel.selectedOptions).map(o => o.value);
-    clickedPairs = []; // user used dropdown → clear bar selections
-    hideToast();
+    clickedPairs = []; // using dropdown clears bar selections
     refreshViews({ skipChart: true });
   });
 }
@@ -423,10 +272,8 @@ function fillStoreSelect() {
   sel.addEventListener('change', () => {
     fillVersionSelect();
     clickedPairs = [];
-    // clear highlight in category dropdown on scope change
     document.getElementById('categorySelect').selectedIndex = -1;
-    hideToast();
-    refreshViews({ skipChart: false });
+    refreshViews({ skipChart: false }); // chart recompute on scope change
   });
 }
 function fillVersionSelect() {
@@ -442,8 +289,7 @@ function fillVersionSelect() {
   sel.addEventListener('change', () => {
     clickedPairs = [];
     document.getElementById('categorySelect').selectedIndex = -1;
-    hideToast();
-    refreshViews({ skipChart: false });
+    refreshViews({ skipChart: false }); // chart recompute on scope change
   }, { once: true });
 }
 
@@ -455,15 +301,14 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   document.getElementById('storeSelect').value = '';
   fillVersionSelect();
   document.getElementById('versionSelect').value = '';
-  hideToast();
   refreshViews({ skipChart: false });
 });
 
 /* ---------- Sync UI ---------- */
 function refreshViews(opts = { skipChart:false }) {
-  if (!opts.skipChart) drawChart();  // only on store/version changes/reset
-  applyHighlight();                  // dim/highlight bars
-  const view = rowsForTable();       // table = union of clicked pairs, else dropdown
+  if (!opts.skipChart) drawChart();              // only on store/version changes/reset
+  applyHighlight();                              // dim/highlight bars
+  const view = rowsForTable();                   // table = union of clicked pairs, else dropdown
   renderTable(view);
   document.getElementById('downloadLink').href = toCSVURI(view.length ? view : RAW);
 }
@@ -490,7 +335,6 @@ fetch(DATA_URL)
   })
   .catch(err => {
     console.error('Failed to load data.json', err);
-    document.getElementById('summary').textContent = 'Failed to load data.json';
   });
 </script>
 </body>
