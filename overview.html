@@ -70,13 +70,9 @@
       cursor: pointer;
     }
     .toast__close:hover { color: #fff; }
-    .toast__bar {
-      width: 100%;
-      height: 4px;
-      background: #374151;
-      border-radius: 999px;
-      overflow: hidden;
-    }
+
+    /* PROGRESS BAR: smaller height (2px) */
+    .toast__bar { width: 100%; height: 2px; background: #374151; border-radius: 999px; overflow: hidden; }
     .toast__bar-inner {
       height: 100%;
       width: 100%;
@@ -136,14 +132,7 @@
   <div id="table"></div>
 
   <!-- Floating banner element -->
-  <div
-    id="toast"
-    class="toast"
-    role="status"
-    aria-live="polite"
-    aria-atomic="true"
-    aria-hidden="true"
-  >
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true">
     <div class="toast__wrap">
       <div class="toast__line">
         <span id="toastLabel" class="toast__pill">Selected</span>
@@ -159,7 +148,7 @@
 const DATA_URL = 'data.json';
 
 let RAW = [];
-let selectedGroups = [];      // multi-select (dropdown)
+let selectedGroups = [];      // dropdown multi-select
 let CAT_ORDER = [];           // based on store/version scope ONLY
 
 // Multi-bar selection: array of {cat, sent}
@@ -189,22 +178,18 @@ function showToast() {
   const bag = document.getElementById('toastSelections');
   const bar = document.getElementById('toastBar');
 
-  // Label + message
   label.textContent = sentimentPillText(clickedPairs.length);
   text.innerHTML = clickedPairs.length
     ? `Showing reviews for the selections below. <span style="opacity:.8">Single-click replaces; <b>Ctrl/Cmd-click</b> adds/removes.</span>`
     : `No selection.`;
 
-  // Build chips
   bag.innerHTML = clickedPairs.map(({cat, sent}) =>
     `<span class="selchip"><b>${sent}</b> • ${cat}</span>`
   ).join(' ');
 
-  // Show
   el.classList.add('toast--show');
   el.setAttribute('aria-hidden', 'false');
 
-  // Reset/progress animate
   if (toastTimer) clearTimeout(toastTimer);
   if (toastInterval) clearInterval(toastInterval);
   bar.style.transform = 'scaleX(1)';
@@ -214,9 +199,7 @@ function showToast() {
     const elapsed = Date.now() - start;
     const frac = Math.max(0, 1 - (elapsed / TOAST_MS));
     bar.style.transform = `scaleX(${frac})`;
-    if (frac <= 0) {
-      clearInterval(toastInterval);
-    }
+    if (frac <= 0) clearInterval(toastInterval);
   }, 50);
 
   toastTimer = setTimeout(hideToast, TOAST_MS);
@@ -228,7 +211,6 @@ function hideToast() {
   if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
   if (toastInterval) { clearInterval(toastInterval); toastInterval = null; }
 }
-// Manual close
 document.getElementById('toastClose').addEventListener('click', hideToast);
 
 /* ---------- CSV download ---------- */
@@ -370,6 +352,21 @@ function drawChart() {
   });
 }
 
+/* ---------- Sync Category dropdown HIGHLIGHT from bar clicks ---------- */
+function syncCategorySelectFromPairs() {
+  const sel = document.getElementById('categorySelect');
+  const set = new Set(clickedPairs.map(p => p.cat));
+  for (const opt of sel.options) {
+    opt.selected = set.has(opt.value);
+    // optional: auto-scroll first selected into view
+    if (opt.selected && sel.selectedOptions.length === 1) {
+      const optEl = opt;
+      sel.scrollTop = optEl.offsetTop - 40;
+    }
+  }
+  // Keep selectedGroups in sync only for highlighting (no filtering change here)
+}
+
 /* ---------- Click handler: multi-select with Ctrl/Cmd ---------- */
 function wireClickHandler() {
   const chart = document.getElementById('chart');
@@ -385,22 +382,22 @@ function wireClickHandler() {
     const idx = clickedPairs.findIndex(p => `${p.cat}|${p.sent}` === key);
 
     if (multi) {
-      // toggle in multi-mode
-      if (idx >= 0) {
-        clickedPairs.splice(idx, 1);
-      } else {
-        clickedPairs.push({ cat, sent });
-      }
+      if (idx >= 0) clickedPairs.splice(idx, 1);
+      else clickedPairs.push({ cat, sent });
     } else {
-      // single mode: replace with just this (or clear if same)
-      if (idx >= 0 && clickedPairs.length === 1) {
-        clickedPairs = [];
-      } else {
-        clickedPairs = [{ cat, sent }];
-      }
+      if (idx >= 0 && clickedPairs.length === 1) clickedPairs = [];
+      else clickedPairs = [{ cat, sent }];
     }
 
-    if (clickedPairs.length) showToast(); else hideToast();
+    if (clickedPairs.length) {
+      showToast();
+    } else {
+      hideToast();
+    }
+
+    // HIGHLIGHT the category dropdown to reflect bar selections
+    syncCategorySelectFromPairs();
+
     refreshViews({ skipChart: true });
   });
 }
@@ -412,7 +409,7 @@ function fillCategorySelect() {
   sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
   sel.addEventListener('change', () => {
     selectedGroups = Array.from(sel.selectedOptions).map(o => o.value);
-    clickedPairs = []; // clear bar selections when using dropdown
+    clickedPairs = []; // user used dropdown → clear bar selections
     hideToast();
     refreshViews({ skipChart: true });
   });
@@ -426,6 +423,8 @@ function fillStoreSelect() {
   sel.addEventListener('change', () => {
     fillVersionSelect();
     clickedPairs = [];
+    // clear highlight in category dropdown on scope change
+    document.getElementById('categorySelect').selectedIndex = -1;
     hideToast();
     refreshViews({ skipChart: false });
   });
@@ -442,6 +441,7 @@ function fillVersionSelect() {
   if (versions.includes(current)) sel.value = current;
   sel.addEventListener('change', () => {
     clickedPairs = [];
+    document.getElementById('categorySelect').selectedIndex = -1;
     hideToast();
     refreshViews({ skipChart: false });
   }, { once: true });
