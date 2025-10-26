@@ -61,10 +61,10 @@
 const DATA_URL = 'data.json';
 
 let RAW = [];
-let clickedCat = null;        // category chosen by clicking chart
-let clickedSent = null;       // sentiment chosen by clicking trace
-let selectedGroups = [];      // categories chosen via multi-select
-let CAT_ORDER = [];           // sorted category list
+let clickedCat = null;        // selected via chart click
+let clickedSent = null;       // 'Positive' | 'Neutral' | 'Negative'
+let selectedGroups = [];      // multi-select
+let CAT_ORDER = [];           // based on store/version scope ONLY
 
 const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negative',
                     'neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral',
@@ -73,7 +73,7 @@ const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negat
 const fmtDate = s => !s ? '' : (s.length > 10 ? s.slice(0,10) : s);
 const uniq = arr => Array.from(new Set(arr));
 
-/* ---------- CSV download (includes Store & Version) ---------- */
+/* ---------- CSV download ---------- */
 function toCSVURI(rows) {
   if (!rows.length) return 'data:text/csv;charset=utf-8,';
   const cols = ['review','category','sentiment_std','rating','review_date','source','app_version'];
@@ -89,7 +89,7 @@ function toCSVURI(rows) {
   return 'data:text/csv;charset=utf-8,' + [header, body].join('\n');
 }
 
-/* ---------- Table render (shows Store & Version) ---------- */
+/* ---------- Table ---------- */
 function renderTable(rows, maxRows=1000) {
   const tbl = document.getElementById('table');
   const hint = document.getElementById('hint');
@@ -125,7 +125,7 @@ function renderTable(rows, maxRows=1000) {
   tbl.innerHTML = html;
 }
 
-/* ---------- Filters ---------- */
+/* ---------- Helpers: selected store/version ---------- */
 function getSelectedStore() {
   return document.getElementById('storeSelect').value || '';
 }
@@ -133,66 +133,67 @@ function getSelectedVersion() {
   return document.getElementById('versionSelect').value || '';
 }
 
-/* Current filtered set (store + version + category; click (cat+sent) wins) */
-function filteredRows() {
+/* ---------- SCOPE FOR CHART (IMPORTANT CHANGE)
+   Chart uses ONLY store+version, ignoring category/sentiment selections.
+----------------------------------------------------------------------- */
+function rowsForChartScope() {
   let arr = RAW;
-
   const store = getSelectedStore();
   if (store) arr = arr.filter(r => (r.source || 'Unknown') === store);
-
   const version = getSelectedVersion();
   if (version) arr = arr.filter(r => String(r.app_version || 'Unknown') === version);
+  return arr;
+}
+
+/* ---------- rows for TABLE (click > multi-select) ---------- */
+function rowsForTable() {
+  let arr = rowsForChartScope();
 
   if (clickedCat && clickedSent) {
-    arr = arr.filter(r =>
+    return arr.filter(r =>
       r.category === clickedCat &&
       (SENTI_MAP[r.sentiment_std] || r.sentiment_std) === clickedSent
     );
-  } else if (clickedCat) {
-    arr = arr.filter(r => r.category === clickedCat);
-  } else if (selectedGroups.length) {
+  }
+  if (clickedCat) {
+    return arr.filter(r => r.category === clickedCat);
+  }
+  if (selectedGroups.length) {
     const set = new Set(selectedGroups);
-    arr = arr.filter(r => set.has(r.category));
+    return arr.filter(r => set.has(r.category));
   }
   return arr;
 }
 
-/* ---------- Chart highlight/dim logic ---------- */
+/* ---------- Chart highlight/dim ---------- */
 function applyHighlight() {
   const chart = document.getElementById('chart');
+  if (!chart || !chart.data) return;
+
   const sentiments = ['Positive','Neutral','Negative'];
+  const baseDim = (clickedCat || clickedSent) ? 0.15 : 1.0;
 
-  // Build per-trace opacity arrays
-  const baseDim = 0.15;
-  const full = 1.0;
-
-  const opacities = sentiments.map(sent => {
-    // one opacity value per category (x)
-    return CAT_ORDER.map(cat => {
-      if (!clickedCat && !clickedSent) return 1.0; // no dimming
-      // If both cat+sent selected, only that single bar is full
+  const opacities = sentiments.map(sent =>
+    CAT_ORDER.map(cat => {
+      if (!clickedCat && !clickedSent) return 1.0;
       if (clickedCat && clickedSent) {
-        return (cat === clickedCat && sent === clickedSent) ? full : baseDim;
+        return (cat === clickedCat && sent === clickedSent) ? 1.0 : 0.15;
       }
-      // If only category selected (shouldn't happen now, but safe)
       if (clickedCat && !clickedSent) {
-        return (cat === clickedCat) ? full : baseDim;
+        return (cat === clickedCat) ? 1.0 : 0.15;
       }
-      // Default
       return baseDim;
-    });
-  });
+    })
+  );
 
-  // Apply with restyle
   Plotly.restyle(chart, { 'marker.opacity': [opacities[0], opacities[1], opacities[2]] });
 }
 
-/* ---------- Draw chart: grouped bars by sentiment ---------- */
+/* ---------- Draw/refresh chart (only for store/version changes) ---------- */
 function drawChart() {
-  const rows = filteredRows();                     // chart respects filters
+  const rows = rowsForChartScope(); // <- keep full view
   CAT_ORDER = uniq(rows.map(r => r.category).filter(Boolean)).sort();
 
-  // Build counts per (category, sentiment)
   const sentiments = ['Positive','Neutral','Negative'];
   const buckets = new Map(); // key: category|sentiment -> count
   for (const r of rows) {
@@ -204,7 +205,6 @@ function drawChart() {
     buckets.set(key, (buckets.get(key) || 0) + 1);
   }
 
-  // y arrays per sentiment in CAT_ORDER
   const yPos = CAT_ORDER.map(c => buckets.get(c+'|Positive') || 0);
   const yNeu = CAT_ORDER.map(c => buckets.get(c+'|Neutral')  || 0);
   const yNeg = CAT_ORDER.map(c => buckets.get(c+'|Negative') || 0);
@@ -225,17 +225,21 @@ function drawChart() {
   };
 
   Plotly.newPlot('chart', traces, layout, {displayModeBar:false}).then(() => {
-    applyHighlight();
+    applyHighlight(); // keep highlight after redraw
+    wireClickHandler(); // ensure click handler is attached
   });
+}
 
-  // clicking any bar selects that category + sentiment
+/* ---------- Click handler: DOES NOT redraw chart ---------- */
+function wireClickHandler() {
   const chart = document.getElementById('chart');
+  chart.removeAllListeners?.('plotly_click'); // avoid duplicates
   chart.on('plotly_click', ev => {
     const pt = ev.points?.[0];
     if (!pt) return;
     const cat = pt.x;
     const sent = pt.data?.name; // 'Positive' | 'Neutral' | 'Negative'
-    // Toggle if same bar clicked again
+
     if (clickedCat === cat && clickedSent === sent) {
       clickedCat = null;
       clickedSent = null;
@@ -243,7 +247,8 @@ function drawChart() {
       clickedCat = cat;
       clickedSent = sent;
     }
-    refreshViews();
+    // IMPORTANT: Do NOT redraw chart here — just restyle + table.
+    refreshViews({ skipChart: true });
   });
 }
 
@@ -254,24 +259,21 @@ function fillCategorySelect() {
   sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
   sel.addEventListener('change', () => {
     selectedGroups = Array.from(sel.selectedOptions).map(o => o.value);
-    // Clear any click highlight if user uses the multi-select
-    clickedCat = null;
-    clickedSent = null;
-    refreshViews();
+    clickedCat = null; clickedSent = null;
+    refreshViews({ skipChart: true }); // don’t change the chart view
   });
 }
 
 function fillStoreSelect() {
   const sel = document.getElementById('storeSelect');
-  const stores = ['iOS & Android', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
+  const stores = ['Review Source', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
   sel.innerHTML = stores.map((s, i) =>
     `<option value="${i===0 ? '' : s}">${s}</option>`
   ).join('');
   sel.addEventListener('change', () => {
     fillVersionSelect();
-    clickedCat = null;
-    clickedSent = null;
-    refreshViews();
+    clickedCat = null; clickedSent = null;
+    refreshViews({ skipChart: false }); // chart needs recompute on scope change
   });
 }
 
@@ -286,33 +288,29 @@ function fillVersionSelect() {
   ).join('');
   if (versions.includes(current)) sel.value = current;
   sel.addEventListener('change', () => {
-    clickedCat = null;
-    clickedSent = null;
-    refreshViews();
+    clickedCat = null; clickedSent = null;
+    refreshViews({ skipChart: false }); // chart needs recompute on scope change
   }, { once: true });
 }
 
 /* ---------- Reset ---------- */
 document.getElementById('resetBtn').addEventListener('click', () => {
-  clickedCat = null;
-  clickedSent = null;
+  clickedCat = null; clickedSent = null;
   selectedGroups = [];
   document.getElementById('categorySelect').selectedIndex = -1;
   document.getElementById('storeSelect').value = '';
   fillVersionSelect();
   document.getElementById('versionSelect').value = '';
-  refreshViews(true);
+  refreshViews({ skipChart: false });
 });
 
 /* ---------- Sync UI ---------- */
-function refreshViews(resetTableHint=false) {
-  drawChart();
-  const view = filteredRows();
+function refreshViews(opts = { skipChart:false }) {
+  if (!opts.skipChart) drawChart();  // only on store/version changes or reset
+  applyHighlight();                  // always re-apply dim/highlight
+  const view = rowsForTable();       // table filters to clicked/multi-select
   renderTable(view);
   document.getElementById('downloadLink').href = toCSVURI(view.length ? view : RAW);
-  if (resetTableHint && !view.length) {
-    document.getElementById('hint').textContent = 'Tip: Click a bar (category + sentiment) to view only those reviews.';
-  }
 }
 
 /* ---------- Load data & init ---------- */
@@ -332,7 +330,7 @@ fetch(DATA_URL)
     fillStoreSelect();
     fillVersionSelect();
     fillCategorySelect();
-    refreshViews();
+    refreshViews({ skipChart: false });
     document.getElementById('downloadLink').href = toCSVURI(RAW);
   })
   .catch(err => {
@@ -342,4 +340,3 @@ fetch(DATA_URL)
 </script>
 </body>
 </html>
-
