@@ -265,7 +265,7 @@ function fillCategorySelect() {
 }
 function fillStoreSelect() {
   const sel = document.getElementById('storeSelect');
-  const stores = ['Review Source', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
+  const stores = ['iOS & Android', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
   sel.innerHTML = stores.map((s, i) =>
     `<option value="${i===0 ? '' : s}">${s}</option>`
   ).join('');
@@ -339,3 +339,4 @@ fetch(DATA_URL)
 </script>
 </body>
 </html>
+
