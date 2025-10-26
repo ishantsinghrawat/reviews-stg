@@ -54,14 +54,15 @@
 
   <div id="chart" style="height:420px;"></div>
   <h3>Reviews</h3>
-  <div id="hint">Tip: Click a bar (any sentiment) or select one or more categories to view reviews.</div>
+  <div id="hint">Tip: Click a bar (category + sentiment) to view only those reviews. Click again to clear.</div>
   <div id="table"></div>
 
 <script>
 const DATA_URL = 'data.json';
 
 let RAW = [];
-let clickedGroup = null;      // category chosen by clicking chart
+let clickedCat = null;        // category chosen by clicking chart
+let clickedSent = null;       // sentiment chosen by clicking trace
 let selectedGroups = [];      // categories chosen via multi-select
 let CAT_ORDER = [];           // sorted category list
 
@@ -94,9 +95,9 @@ function renderTable(rows, maxRows=1000) {
   const hint = document.getElementById('hint');
   if (!rows.length) {
     tbl.innerHTML = '';
-    hint.textContent = clickedGroup || selectedGroups.length
+    hint.textContent = (clickedCat || selectedGroups.length)
       ? 'No reviews match the current selection.'
-      : 'Tip: Click a bar (any sentiment) or select categories to view reviews.';
+      : 'Tip: Click a bar (category + sentiment) to view only those reviews.';
     return;
   }
   hint.textContent = '';
@@ -132,7 +133,7 @@ function getSelectedVersion() {
   return document.getElementById('versionSelect').value || '';
 }
 
-/* Current filtered set (store + version + category; click wins) */
+/* Current filtered set (store + version + category; click (cat+sent) wins) */
 function filteredRows() {
   let arr = RAW;
 
@@ -142,8 +143,13 @@ function filteredRows() {
   const version = getSelectedVersion();
   if (version) arr = arr.filter(r => String(r.app_version || 'Unknown') === version);
 
-  if (clickedGroup) {
-    arr = arr.filter(r => r.category === clickedGroup);
+  if (clickedCat && clickedSent) {
+    arr = arr.filter(r =>
+      r.category === clickedCat &&
+      (SENTI_MAP[r.sentiment_std] || r.sentiment_std) === clickedSent
+    );
+  } else if (clickedCat) {
+    arr = arr.filter(r => r.category === clickedCat);
   } else if (selectedGroups.length) {
     const set = new Set(selectedGroups);
     arr = arr.filter(r => set.has(r.category));
@@ -151,23 +157,35 @@ function filteredRows() {
   return arr;
 }
 
-/* ---------- Summary ---------- */
-// function renderSummary(rows) {
-//   const byStore = new Map();
-//   const byVer = new Map();
-//   for (const r of rows) {
-//     const s = r.source || 'Unknown';
-//     const v = String(r.app_version || 'Unknown');
-//     byStore.set(s, (byStore.get(s) || 0) + 1);
-//     byVer.set(v, (byVer.get(v) || 0) + 1);
-//   }
-//   const storeTxt = Array.from(byStore.entries()).map(([k,v]) => `${k}: ${v}`).join(', ') || '—';
-//   const verTxt = Array.from(byVer.entries()).map(([k,v]) => `${k}: ${v}`).join(', ') || '—';
-//   document.getElementById('summary').innerHTML =
-//     `<span class="kbd">Total</span> ${rows.length} &nbsp;|&nbsp; ` +
-//     `<span class="kbd">By Store</span> ${storeTxt} &nbsp;|&nbsp; ` +
-//     `<span class="kbd">By Version</span> ${verTxt}`;
-// }
+/* ---------- Chart highlight/dim logic ---------- */
+function applyHighlight() {
+  const chart = document.getElementById('chart');
+  const sentiments = ['Positive','Neutral','Negative'];
+
+  // Build per-trace opacity arrays
+  const baseDim = 0.15;
+  const full = 1.0;
+
+  const opacities = sentiments.map(sent => {
+    // one opacity value per category (x)
+    return CAT_ORDER.map(cat => {
+      if (!clickedCat && !clickedSent) return 1.0; // no dimming
+      // If both cat+sent selected, only that single bar is full
+      if (clickedCat && clickedSent) {
+        return (cat === clickedCat && sent === clickedSent) ? full : baseDim;
+      }
+      // If only category selected (shouldn't happen now, but safe)
+      if (clickedCat && !clickedSent) {
+        return (cat === clickedCat) ? full : baseDim;
+      }
+      // Default
+      return baseDim;
+    });
+  });
+
+  // Apply with restyle
+  Plotly.restyle(chart, { 'marker.opacity': [opacities[0], opacities[1], opacities[2]] });
+}
 
 /* ---------- Draw chart: grouped bars by sentiment ---------- */
 function drawChart() {
@@ -179,10 +197,10 @@ function drawChart() {
   const buckets = new Map(); // key: category|sentiment -> count
   for (const r of rows) {
     const c = r.category || '';
-    const s = (r.sentiment_std && SENTI_MAP[r.sentiment_std]) ? SENTI_MAP[r.sentiment_std] : (SENTI_MAP[r.sentiment_std] || r.sentiment_std || '');
-    const S = SENTI_MAP[s] || s; // normalize
-    if (!c || !S) continue;
-    const key = c + '|' + S;
+    const sRaw = r.sentiment_std || r.sentiment || '';
+    const s = SENTI_MAP[sRaw] || sRaw;
+    if (!c || !s) continue;
+    const key = c + '|' + s;
     buckets.set(key, (buckets.get(key) || 0) + 1);
   }
 
@@ -199,21 +217,32 @@ function drawChart() {
 
   const layout = {
     title: 'Reviews by Category & Sentiment',
-    barmode: 'group', // change to 'stack' if you prefer stacked bars
+    barmode: 'group',
     margin: {l:40,r:10,t:50,b:80},
     xaxis: { title: "Review Category" },
     yaxis: { title: "Count of Reviews" },
     legend: { orientation:'h', x:0, y:1.14 }
   };
 
-  Plotly.newPlot('chart', traces, layout, {displayModeBar:false});
+  Plotly.newPlot('chart', traces, layout, {displayModeBar:false}).then(() => {
+    applyHighlight();
+  });
 
-  // clicking any bar selects that category (regardless of sentiment trace)
+  // clicking any bar selects that category + sentiment
   const chart = document.getElementById('chart');
   chart.on('plotly_click', ev => {
-    const cat = ev.points?.[0]?.x;
-    if (!cat) return;
-    clickedGroup = cat;
+    const pt = ev.points?.[0];
+    if (!pt) return;
+    const cat = pt.x;
+    const sent = pt.data?.name; // 'Positive' | 'Neutral' | 'Negative'
+    // Toggle if same bar clicked again
+    if (clickedCat === cat && clickedSent === sent) {
+      clickedCat = null;
+      clickedSent = null;
+    } else {
+      clickedCat = cat;
+      clickedSent = sent;
+    }
     refreshViews();
   });
 }
@@ -225,7 +254,9 @@ function fillCategorySelect() {
   sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
   sel.addEventListener('change', () => {
     selectedGroups = Array.from(sel.selectedOptions).map(o => o.value);
-    clickedGroup = null;
+    // Clear any click highlight if user uses the multi-select
+    clickedCat = null;
+    clickedSent = null;
     refreshViews();
   });
 }
@@ -238,7 +269,8 @@ function fillStoreSelect() {
   ).join('');
   sel.addEventListener('change', () => {
     fillVersionSelect();
-    clickedGroup = null;
+    clickedCat = null;
+    clickedSent = null;
     refreshViews();
   });
 }
@@ -254,14 +286,16 @@ function fillVersionSelect() {
   ).join('');
   if (versions.includes(current)) sel.value = current;
   sel.addEventListener('change', () => {
-    clickedGroup = null;
+    clickedCat = null;
+    clickedSent = null;
     refreshViews();
   }, { once: true });
 }
 
 /* ---------- Reset ---------- */
 document.getElementById('resetBtn').addEventListener('click', () => {
-  clickedGroup = null;
+  clickedCat = null;
+  clickedSent = null;
   selectedGroups = [];
   document.getElementById('categorySelect').selectedIndex = -1;
   document.getElementById('storeSelect').value = '';
@@ -277,7 +311,7 @@ function refreshViews(resetTableHint=false) {
   renderTable(view);
   document.getElementById('downloadLink').href = toCSVURI(view.length ? view : RAW);
   if (resetTableHint && !view.length) {
-    document.getElementById('hint').textContent = 'Tip: Click a bar (any sentiment) or select categories to view reviews.';
+    document.getElementById('hint').textContent = 'Tip: Click a bar (category + sentiment) to view only those reviews.';
   }
 }
 
@@ -308,8 +342,3 @@ fetch(DATA_URL)
 </script>
 </body>
 </html>
-
-
-
-
-
