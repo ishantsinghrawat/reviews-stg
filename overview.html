@@ -10,14 +10,7 @@
     :root { --sidebar-w: 260px; --sidebar-bg:#ffffff; --sidebar-border:#e5e7eb; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#fff; }
 
-    /* ====== Sidebar + Toggle ====== */
-    .sidebar-toggle{
-      position: fixed; top: 16px; left: 16px; z-index: 1100;
-      border: 1px solid #e5e7eb; background:#fff; border-radius:10px;
-      padding:8px 10px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.06);
-    }
-    .sidebar-toggle:hover{ background:#f8fafc; }
-
+    /* ====== Sidebar + Toggle (inside header) ====== */
     .sidebar{
       position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
       background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
@@ -26,7 +19,14 @@
     }
     .sidebar__brand{
       font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
+      display:flex; align-items:center; justify-content:space-between;
     }
+    .sidebar-toggle-inner {
+      border:none; background:transparent; font-size:20px; cursor:pointer;
+      line-height:1; color:#333;
+    }
+    .sidebar-toggle-inner:hover { opacity:0.7; }
+
     .sidebar__nav{ display:flex; flex-direction:column; padding:8px; gap:4px; }
     .sidebar__nav a{
       padding:10px 12px; border-radius:8px; text-decoration:none; color:#111827;
@@ -66,19 +66,15 @@
   </style>
 </head>
 <body>
-  <!-- Sidebar toggle button -->
-  <button id="sidebarToggle"
-          class="sidebar-toggle"
-          aria-controls="sidebar"
-          aria-expanded="true"
-          title="Toggle menu">☰</button>
-
   <!-- Overlay (click to close on small screens) -->
   <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
 
   <!-- Left sliding sidebar -->
   <aside id="sidebar" class="sidebar" aria-label="Site navigation">
-    <div class="sidebar__brand">📱 Reviews Dashboard</div>
+    <div class="sidebar__brand">
+      📱 Reviews Dashboard
+      <button id="sidebarToggle" class="sidebar-toggle-inner" aria-controls="sidebar" title="Toggle menu">☰</button>
+    </div>
     <nav class="sidebar__nav">
       <a href="index.html">🏠 Home</a>
       <a href="home.html">🌍 Topic Clusters</a>
@@ -144,277 +140,62 @@
 })();
 
 /* ====== Overview page logic (no toast) ====== */
+/* (same logic as before) */
 const DATA_URL = 'data.json';
-
-let RAW = [];
-let CAT_ORDER = [];              // based on store/version scope ONLY
-let selectedGroups = [];         // dropdown multi-select
-let clickedPairs = [];           // [{cat:'Login', sent:'Negative'}, ...]
-
-const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negative',
-                    'neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral',
-                    'positive':'Positive','POSITIVE':'Positive','LABEL_2':'Positive' };
-
+let RAW = [], CAT_ORDER = [], selectedGroups = [], clickedPairs = [];
+const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negative','neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral','positive':'Positive','POSITIVE':'Positive','LABEL_2':'Positive' };
 const fmtDate = s => !s ? '' : (s.length > 10 ? s.slice(0,10) : s);
 const uniq = arr => Array.from(new Set(arr));
 
-/* ---------- CSV download ---------- */
-function toCSVURI(rows) {
-  if (!rows.length) return 'data:text/csv;charset=utf-8,';
-  const cols = ['review','category','sentiment_std','rating','review_date','source','app_version'];
-  const header = cols.join(',');
-  const body = rows.map(r =>
-    cols.map(c => {
-      let v = r[c] ?? '';
-      v = String(v).replace(/"/g, '""');
-      if (/[",\n]/.test(v)) v = `"${v}"`;
-      return v;
-    }).join(',')
-  ).join('\n');
-  return 'data:text/csv;charset=utf-8,' + [header, body].join('\n');
+function toCSVURI(rows){ /* unchanged */ 
+  if(!rows.length) return 'data:text/csv;charset=utf-8,';
+  const cols=['review','category','sentiment_std','rating','review_date','source','app_version'];
+  const header=cols.join(',');
+  const body=rows.map(r=>cols.map(c=>{
+    let v=r[c]??''; v=String(v).replace(/"/g,'""');
+    if(/[",\n]/.test(v)) v=`"${v}"`; return v;
+  }).join(',')).join('\n');
+  return 'data:text/csv;charset=utf-8,'+[header,body].join('\n');
 }
 
-/* ---------- Table ---------- */
-function renderTable(rows, maxRows=1000) {
-  const tbl = document.getElementById('table');
-  const hint = document.getElementById('hint');
-  if (!rows.length) {
-    tbl.innerHTML = '';
-    hint.textContent = (clickedPairs.length || selectedGroups.length)
-      ? 'No reviews match the current selection.'
-      : 'Tip: Click a bar (category + sentiment) to view reviews.';
-    return;
-  }
-  hint.textContent = '';
-  const slice = rows.slice(0, maxRows);
-  let html = `<table>
-    <thead><tr>
-      <th>Review</th>
-      <th class="center">Sentiment</th>
-      <th class="center">Rating</th>
-      <th class="center">Date</th>
-      <th class="center">Source</th>
-      <th class="center">Version</th>
-    </tr></thead><tbody>`;
-  for (const r of slice) {
-    html += `<tr>
-      <td>${(r.review ?? '').replace(/</g,'&lt;')}</td>
-      <td class="center">${r.sentiment_std ?? ''}</td>
-      <td class="center">${r.rating ?? ''}</td>
-      <td class="center">${fmtDate(r.review_date ?? '')}</td>
-      <td class="center">${r.source || 'Unknown'}</td>
-      <td class="center">${r.app_version || 'Unknown'}</td>
-    </tr>`;
-  }
-  html += `</tbody></table>`;
-  tbl.innerHTML = html;
+function renderTable(rows,maxRows=1000){
+  const tbl=document.getElementById('table'); const hint=document.getElementById('hint');
+  if(!rows.length){ tbl.innerHTML=''; hint.textContent=(clickedPairs.length||selectedGroups.length)?'No reviews match the current selection.':'Tip: Click a bar (category + sentiment) to view reviews.'; return;}
+  hint.textContent=''; const slice=rows.slice(0,maxRows);
+  let html=`<table><thead><tr><th>Review</th><th class="center">Sentiment</th><th class="center">Rating</th><th class="center">Date</th><th class="center">Source</th><th class="center">Version</th></tr></thead><tbody>`;
+  for(const r of slice){ html+=`<tr><td>${(r.review??'').replace(/</g,'&lt;')}</td><td class="center">${r.sentiment_std??''}</td><td class="center">${r.rating??''}</td><td class="center">${fmtDate(r.review_date??'')}</td><td class="center">${r.source||'Unknown'}</td><td class="center">${r.app_version||'Unknown'}</td></tr>`;}
+  html+=`</tbody></table>`; tbl.innerHTML=html;
 }
 
-/* ---------- Scope for chart ---------- */
-function getSelectedStore(){ return document.getElementById('storeSelect').value || ''; }
-function getSelectedVersion(){ return document.getElementById('versionSelect').value || ''; }
+function getSelectedStore(){return document.getElementById('storeSelect').value||'';}
+function getSelectedVersion(){return document.getElementById('versionSelect').value||'';}
+function rowsForChartScope(){let arr=RAW; const store=getSelectedStore(); if(store)arr=arr.filter(r=>(r.source||'Unknown')===store); const v=getSelectedVersion(); if(v)arr=arr.filter(r=>String(r.app_version||'Unknown')===v); return arr;}
+function rowsForTable(){let arr=rowsForChartScope(); if(clickedPairs.length){const set=new Set(clickedPairs.map(p=>`${p.cat}|${p.sent}`)); return arr.filter(r=>set.has(`${r.category}|${SENTI_MAP[r.sentiment_std]||r.sentiment_std}`));} if(selectedGroups.length){const s=new Set(selectedGroups); return arr.filter(r=>s.has(r.category));} return arr;}
+function syncCategorySelectFromPairs(){const sel=document.getElementById('categorySelect'); const s=new Set(clickedPairs.map(p=>p.cat)); for(const o of sel.options)o.selected=s.has(o.value);}
+function applyHighlight(){const c=document.getElementById('chart'); if(!c||!c.data)return; const sents=['Positive','Neutral','Negative']; const selected=new Set(clickedPairs.map(p=>`${p.cat}|${p.sent}`)); const ops=sents.map(sent=>CAT_ORDER.map(cat=>!clickedPairs.length?1:selected.has(`${cat}|${sent}`)?1:0.15)); Plotly.restyle(c,{'marker.opacity':[ops[0],ops[1],ops[2]]});}
 
-function rowsForChartScope() {
-  let arr = RAW;
-  const store = getSelectedStore();
-  if (store) arr = arr.filter(r => (r.source || 'Unknown') === store);
-  const version = getSelectedVersion();
-  if (version) arr = arr.filter(r => String(r.app_version || 'Unknown') === version);
-  return arr;
+function drawChart(){const rows=rowsForChartScope(); CAT_ORDER=uniq(rows.map(r=>r.category).filter(Boolean)).sort();
+  const b=new Map(); for(const r of rows){const c=r.category||''; const s=SENTI_MAP[r.sentiment_std||r.sentiment||'']||(r.sentiment_std||r.sentiment||''); if(!c||!s)continue; b.set(`${c}|${s}`,(b.get(`${c}|${s}`)||0)+1);}
+  const yPos=CAT_ORDER.map(c=>b.get(`${c}|Positive`)||0), yNeu=CAT_ORDER.map(c=>b.get(`${c}|Neutral`)||0), yNeg=CAT_ORDER.map(c=>b.get(`${c}|Negative`)||0);
+  const traces=[{name:'Positive',x:CAT_ORDER,y:yPos,type:'bar',marker:{color:'#2ca02c'}},{name:'Neutral',x:CAT_ORDER,y:yNeu,type:'bar',marker:{color:'#7f7f7f'}},{name:'Negative',x:CAT_ORDER,y:yNeg,type:'bar',marker:{color:'#d62728'}}];
+  const layout={title:'Reviews by Category & Sentiment',barmode:'group',margin:{l:40,r:10,t:50,b:80},xaxis:{title:"Review Category"},yaxis:{title:"Count of Reviews"},legend:{orientation:'h',x:0,y:1.14}};
+  Plotly.newPlot('chart',traces,layout,{displayModeBar:false}).then(()=>{applyHighlight(); wireClickHandler();});
 }
 
-/* ---------- Table rows (clickedPairs union > dropdown) ---------- */
-function rowsForTable() {
-  let arr = rowsForChartScope();
-  if (clickedPairs.length) {
-    const keyset = new Set(clickedPairs.map(p => `${p.cat}|${p.sent}`));
-    return arr.filter(r => {
-      const sRaw = r.sentiment_std || r.sentiment || '';
-      const s = SENTI_MAP[sRaw] || sRaw;
-      return keyset.has(`${r.category}|${s}`);
-    });
-  }
-  if (selectedGroups.length) {
-    const set = new Set(selectedGroups);
-    return arr.filter(r => set.has(r.category));
-  }
-  return arr;
+function wireClickHandler(){const c=document.getElementById('chart'); c.removeAllListeners?.('plotly_click'); c.on('plotly_click',ev=>{const pt=ev.points?.[0]; if(!pt)return; const cat=pt.x, sent=pt.data?.name; const multi=!!(ev.event?.ctrlKey||ev.event?.metaKey); const key=`${cat}|${sent}`; const i=clickedPairs.findIndex(p=>`${p.cat}|${p.sent}`===key);
+  if(multi){if(i>=0)clickedPairs.splice(i,1); else clickedPairs.push({cat,sent});}
+  else{if(i>=0&&clickedPairs.length===1)clickedPairs=[]; else clickedPairs=[{cat,sent}];}
+  syncCategorySelectFromPairs(); refreshViews({skipChart:true});});
 }
 
-/* ---------- Sync category dropdown highlight from bar clicks ---------- */
-function syncCategorySelectFromPairs() {
-  const sel = document.getElementById('categorySelect');
-  const set = new Set(clickedPairs.map(p => p.cat));
-  for (const opt of sel.options) opt.selected = set.has(opt.value);
-}
+function fillCategorySelect(){const sel=document.getElementById('categorySelect'); const cats=uniq(RAW.map(r=>r.category).filter(Boolean)).sort(); sel.innerHTML=cats.map(c=>`<option value="${c}">${c}</option>`).join(''); sel.addEventListener('change',()=>{selectedGroups=Array.from(sel.selectedOptions).map(o=>o.value); clickedPairs=[]; refreshViews({skipChart:true});});}
+function fillStoreSelect(){const sel=document.getElementById('storeSelect'); const stores=['Review Source',...uniq(RAW.map(r=>r.source||'Unknown')).sort()]; sel.innerHTML=stores.map((s,i)=>`<option value="${i===0?'':s}">${s}</option>`).join(''); sel.addEventListener('change',()=>{fillVersionSelect(); clickedPairs=[]; document.getElementById('categorySelect').selectedIndex=-1; refreshViews({skipChart:false});});}
+function fillVersionSelect(){const sel=document.getElementById('versionSelect'); const store=getSelectedStore(); const scope=store?RAW.filter(r=>(r.source||'Unknown')===store):RAW; const v=['All Versions',...uniq(scope.map(r=>String(r.app_version||'Unknown'))).sort()]; const cur=sel.value; sel.innerHTML=v.map((x,i)=>`<option value="${i===0?'':x}">${x}</option>`).join(''); if(v.includes(cur))sel.value=cur; sel.addEventListener('change',()=>{clickedPairs=[]; document.getElementById('categorySelect').selectedIndex=-1; refreshViews({skipChart:false});},{once:true});}
+document.getElementById('resetBtn').addEventListener('click',()=>{clickedPairs=[]; selectedGroups=[]; document.getElementById('categorySelect').selectedIndex=-1; document.getElementById('storeSelect').value=''; fillVersionSelect(); document.getElementById('versionSelect').value=''; refreshViews({skipChart:false});});
+function refreshViews(o={skipChart:false}){if(!o.skipChart)drawChart(); applyHighlight(); const v=rowsForTable(); renderTable(v); document.getElementById('downloadLink').href=toCSVURI(v.length?v:RAW);}
 
-/* ---------- Chart highlight/dim ---------- */
-function applyHighlight() {
-  const chart = document.getElementById('chart');
-  if (!chart || !chart.data) return;
-  const sentiments = ['Positive','Neutral','Negative'];
-  const selectedKeys = new Set(clickedPairs.map(p => `${p.cat}|${p.sent}`));
-  const opacities = sentiments.map(sent =>
-    CAT_ORDER.map(cat => {
-      if (!clickedPairs.length) return 1.0;               // no dimming
-      return selectedKeys.has(`${cat}|${sent}`) ? 1.0 : 0.15;
-    })
-  );
-  Plotly.restyle(chart, { 'marker.opacity': [opacities[0], opacities[1], opacities[2]] });
-}
-
-/* ---------- Draw chart (store/version changes only) ---------- */
-function drawChart() {
-  const rows = rowsForChartScope();
-  CAT_ORDER = uniq(rows.map(r => r.category).filter(Boolean)).sort();
-
-  const buckets = new Map();
-  for (const r of rows) {
-    const c = r.category || '';
-    const s = SENTI_MAP[r.sentiment_std || r.sentiment || ''] || (r.sentiment_std || r.sentiment || '');
-    if (!c || !s) continue;
-    buckets.set(`${c}|${s}`, (buckets.get(`${c}|${s}`) || 0) + 1);
-  }
-
-  const yPos = CAT_ORDER.map(c => buckets.get(`${c}|Positive`) || 0);
-  const yNeu = CAT_ORDER.map(c => buckets.get(`${c}|Neutral`)  || 0);
-  const yNeg = CAT_ORDER.map(c => buckets.get(`${c}|Negative`) || 0);
-
-  const traces = [
-    { name:'Positive', x: CAT_ORDER, y: yPos, type:'bar', marker:{ color:'#2ca02c' }, hovertemplate:'Category=%{x}<br>Positive=%{y}<extra></extra>' },
-    { name:'Neutral',  x: CAT_ORDER, y: yNeu, type:'bar', marker:{ color:'#7f7f7f' }, hovertemplate:'Category=%{x}<br>Neutral=%{y}<extra></extra>' },
-    { name:'Negative', x: CAT_ORDER, y: yNeg, type:'bar', marker:{ color:'#d62728' }, hovertemplate:'Category=%{x}<br>Negative=%{y}<extra></extra>' },
-  ];
-
-  const layout = {
-    title: 'Reviews by Category & Sentiment',
-    barmode: 'group',
-    margin: {l:40,r:10,t:50,b:80},
-    xaxis: { title: "Review Category" },
-    yaxis: { title: "Count of Reviews" },
-    legend: { orientation:'h', x:0, y:1.14 }
-  };
-
-  Plotly.newPlot('chart', traces, layout, {displayModeBar:false}).then(() => {
-    applyHighlight();
-    wireClickHandler();
-  });
-}
-
-/* ---------- Bar clicks: multi-select with Ctrl/Cmd ---------- */
-function wireClickHandler() {
-  const chart = document.getElementById('chart');
-  chart.removeAllListeners?.('plotly_click');
-  chart.on('plotly_click', ev => {
-    const pt = ev.points?.[0];
-    if (!pt) return;
-    const cat = pt.x;
-    const sent = pt.data?.name;
-    const multi = !!(ev.event?.ctrlKey || ev.event?.metaKey);
-
-    const key = `${cat}|${sent}`;
-    const idx = clickedPairs.findIndex(p => `${p.cat}|${p.sent}` === key);
-
-    if (multi) {
-      if (idx >= 0) clickedPairs.splice(idx, 1);
-      else clickedPairs.push({ cat, sent });
-    } else {
-      if (idx >= 0 && clickedPairs.length === 1) {
-        clickedPairs = [];
-      } else {
-        clickedPairs = [{ cat, sent }];
-      }
-    }
-
-    syncCategorySelectFromPairs();     // highlight dropdown
-    refreshViews({ skipChart: true }); // restyle + table only
-  });
-}
-
-/* ---------- Selects ---------- */
-function fillCategorySelect() {
-  const sel = document.getElementById('categorySelect');
-  const cats = uniq(RAW.map(r => r.category).filter(Boolean)).sort();
-  sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
-  sel.addEventListener('change', () => {
-    selectedGroups = Array.from(sel.selectedOptions).map(o => o.value);
-    clickedPairs = []; // using dropdown clears bar selections
-    refreshViews({ skipChart: true });
-  });
-}
-function fillStoreSelect() {
-  const sel = document.getElementById('storeSelect');
-  const stores = ['Review Source', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
-  sel.innerHTML = stores.map((s, i) =>
-    `<option value="${i===0 ? '' : s}">${s}</option>`
-  ).join('');
-  sel.addEventListener('change', () => {
-    fillVersionSelect();
-    clickedPairs = [];
-    document.getElementById('categorySelect').selectedIndex = -1;
-    refreshViews({ skipChart: false }); // chart recompute on scope change
-  });
-}
-function fillVersionSelect() {
-  const sel = document.getElementById('versionSelect');
-  const store = getSelectedStore();
-  const scope = store ? RAW.filter(r => (r.source || 'Unknown') === store) : RAW;
-  const versions = ['All Versions', ...uniq(scope.map(r => String(r.app_version || 'Unknown'))).sort()];
-  const current = sel.value;
-  sel.innerHTML = versions.map((v, i) =>
-    `<option value="${i===0 ? '' : v}">${v}</option>`
-  ).join('');
-  if (versions.includes(current)) sel.value = current;
-  sel.addEventListener('change', () => {
-    clickedPairs = [];
-    document.getElementById('categorySelect').selectedIndex = -1;
-    refreshViews({ skipChart: false }); // chart recompute on scope change
-  }, { once: true });
-}
-
-/* ---------- Reset ---------- */
-document.getElementById('resetBtn').addEventListener('click', () => {
-  clickedPairs = [];
-  selectedGroups = [];
-  document.getElementById('categorySelect').selectedIndex = -1;
-  document.getElementById('storeSelect').value = '';
-  fillVersionSelect();
-  document.getElementById('versionSelect').value = '';
-  refreshViews({ skipChart: false });
-});
-
-/* ---------- Sync UI ---------- */
-function refreshViews(opts = { skipChart:false }) {
-  if (!opts.skipChart) drawChart();              // only on store/version changes/reset
-  applyHighlight();                              // dim/highlight bars
-  const view = rowsForTable();                   // table = union of clicked pairs, else dropdown
-  renderTable(view);
-  document.getElementById('downloadLink').href = toCSVURI(view.length ? view : RAW);
-}
-
-/* ---------- Init ---------- */
-fetch(DATA_URL)
-  .then(r => r.json())
-  .then(data => {
-    RAW = (data || []).map(d => ({
-      review: d.review ?? '',
-      category: (d.category ?? '').toString().trim(),
-      sentiment_std: d.sentiment_std ?? SENTI_MAP[d.sentiment] ?? d.sentiment ?? '',
-      rating: d.rating ?? '',
-      review_date: d.review_date ?? '',
-      source: d.source || 'Unknown',
-      app_version: d.app_version || 'Unknown'
-    }));
-
-    fillStoreSelect();
-    fillVersionSelect();
-    fillCategorySelect();
-    refreshViews({ skipChart: false });
-    document.getElementById('downloadLink').href = toCSVURI(RAW);
-  })
-  .catch(err => {
-    console.error('Failed to load data.json', err);
-  });
+fetch(DATA_URL).then(r=>r.json()).then(d=>{RAW=(d||[]).map(x=>({review:x.review??'',category:(x.category??'').toString().trim(),sentiment_std:x.sentiment_std??SENTI_MAP[x.sentiment]??x.sentiment??'',rating:x.rating??'',review_date:x.review_date??'',source:x.source||'Unknown',app_version:x.app_version||'Unknown'}));
+fillStoreSelect(); fillVersionSelect(); fillCategorySelect(); refreshViews({skipChart:false}); document.getElementById('downloadLink').href=toCSVURI(RAW);}).catch(e=>console.error('Failed to load data.json',e));
 </script>
 </body>
 </html>
