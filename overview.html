@@ -38,7 +38,9 @@
       position: fixed; inset:0; background:rgba(0,0,0,.35); z-index:1040;
     }
 
-    .page{ margin-left: var(--sidebar-w); transition: margin-left .22s ease; padding:16px; }
+    .page h1 {margin-top: 0; margin-bottom: 12px;text-align: center;font-size: 28px; font-weight: 700;}
+
+
 
     /* Collapsed state */
     body.sidebar-collapsed .sidebar{ transform: translateX(-100%); }
@@ -108,7 +110,7 @@
 
   <!-- Page content -->
   <div class="page">
-    <h1>Overview</h1>
+    <h1>Customer Voice</h1>
 
     <!-- Filters toolbar -->
     <div class="toolbar">
@@ -437,4 +439,5 @@ fetch(DATA_URL)
 </script>
 </body>
 </html>
+
 
