@@ -37,7 +37,7 @@
 
   <!-- Filters toolbar -->
   <div class="toolbar">
-    <label for="storeSelect"><strong>Store</strong></label>
+    <label for="storeSelect"><strong>Source</strong></label>
     <select id="storeSelect"></select>
 
     <label for="versionSelect"><strong>Version</strong></label>
@@ -107,7 +107,7 @@ function renderTable(rows, maxRows=1000) {
       <th class="center">Sentiment</th>
       <th class="center">Rating</th>
       <th class="center">Date</th>
-      <th class="center">Store</th>
+      <th class="center">Source</th>
       <th class="center">Version</th>
     </tr></thead><tbody>`;
   for (const r of slice) {
@@ -232,7 +232,7 @@ function fillCategorySelect() {
 
 function fillStoreSelect() {
   const sel = document.getElementById('storeSelect');
-  const stores = ['All Stores', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
+  const stores = ['Review Source', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
   sel.innerHTML = stores.map((s, i) =>
     `<option value="${i===0 ? '' : s}">${s}</option>`
   ).join('');
@@ -308,6 +308,7 @@ fetch(DATA_URL)
 </script>
 </body>
 </html>
+
 
 
 
