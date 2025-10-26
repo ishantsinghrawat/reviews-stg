@@ -6,8 +6,52 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
-    .navbar a { margin-right: 8px; text-decoration: none; }
+    /* ====== Base ====== */
+    :root { --sidebar-w: 260px; --sidebar-bg:#ffffff; --sidebar-border:#e5e7eb; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#fff; }
+
+    /* ====== Sidebar + Toggle ====== */
+    .sidebar-toggle{
+      position: fixed; top: 16px; left: 16px; z-index: 1100;
+      border: 1px solid #e5e7eb; background:#fff; border-radius:10px;
+      padding:8px 10px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.06);
+    }
+    .sidebar-toggle:hover{ background:#f8fafc; }
+
+    .sidebar{
+      position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
+      background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
+      transform: translateX(0); transition: transform .22s ease;
+      display:flex; flex-direction:column;
+    }
+    .sidebar__brand{
+      font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
+    }
+    .sidebar__nav{ display:flex; flex-direction:column; padding:8px; gap:4px; }
+    .sidebar__nav a{
+      padding:10px 12px; border-radius:8px; text-decoration:none; color:#111827;
+    }
+    .sidebar__nav a:hover{ background:#f3f4f6; }
+    .sidebar__nav a.active{ background:#1f75fe; color:#fff; }
+
+    .sidebar-overlay{
+      position: fixed; inset:0; background:rgba(0,0,0,.35); z-index:1040;
+    }
+
+    .page{ margin-left: var(--sidebar-w); transition: margin-left .22s ease; padding:16px; }
+
+    /* Collapsed state */
+    body.sidebar-collapsed .sidebar{ transform: translateX(-100%); }
+    body.sidebar-collapsed .page{ margin-left: 0; }
+    body.sidebar-collapsed .sidebar-overlay{ display:none; }
+
+    /* Responsive */
+    @media (max-width: 900px){
+      body:not(.sidebar-collapsed) .sidebar-overlay{ display:block; }
+      .page{ margin-left: 0; } /* don’t push content on small screens */
+    }
+
+    /* ====== Page UI ====== */
     .toolbar { display:flex; align-items:center; gap:10px; margin: 8px 0 12px; flex-wrap: wrap; }
     select { min-width: 240px; padding: 6px; }
     button { padding:8px 12px; border:0; border-radius:8px; background:#f2f3f5; cursor:pointer; }
@@ -22,40 +66,84 @@
   </style>
 </head>
 <body>
-  <!-- Navbar -->
-  <div class="navbar" style="margin-bottom:10px;">
-    <a href="index.html">🏠 Home</a>
-    <a href="home.html">🌍 Topic Clusters</a>
-    <a href="overview.html"><b>✍ Topics Overview</b></a>
-    <a href="sentiment.html">🙂 Sentiments</a>
-    <a href="review_trend.html">📈 Review Trends</a>
-    <a href="rating_distribution.html">📊 Rating Distribution</a>
-    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+  <!-- Sidebar toggle button -->
+  <button id="sidebarToggle"
+          class="sidebar-toggle"
+          aria-controls="sidebar"
+          aria-expanded="true"
+          title="Toggle menu">☰</button>
+
+  <!-- Overlay (click to close on small screens) -->
+  <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
+
+  <!-- Left sliding sidebar -->
+  <aside id="sidebar" class="sidebar" aria-label="Site navigation">
+    <div class="sidebar__brand">📱 Reviews Dashboard</div>
+    <nav class="sidebar__nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="home.html">🌍 Topic Clusters</a>
+      <a class="active" href="overview.html">✍ Topics Overview</a>
+      <a href="sentiment.html">🙂 Sentiments</a>
+      <a href="review_trend.html">📈 Review Trends</a>
+      <a href="rating_distribution.html">📊 Rating Distribution</a>
+      <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+    </nav>
+  </aside>
+
+  <!-- Page content -->
+  <div class="page">
+    <h1>Overview</h1>
+
+    <!-- Filters toolbar -->
+    <div class="toolbar">
+      <label for="storeSelect"><strong>Source</strong></label>
+      <select id="storeSelect"></select>
+
+      <label for="versionSelect"><strong>Version</strong></label>
+      <select id="versionSelect"></select>
+
+      <label for="categorySelect"><strong>Category</strong></label>
+      <select id="categorySelect" multiple></select>
+
+      <button id="resetBtn">Reset</button>
+      <a id="downloadLink" class="btn" download="reviews_overview.csv" href="#">Download Reviews</a>
+    </div>
+
+    <div id="chart" style="height:420px;"></div>
+    <h3>Reviews</h3>
+    <div id="hint">Tip: Click a bar (category + sentiment). Single-click replaces; <b>Ctrl/Cmd-click</b> adds/removes. Click again to toggle.</div>
+    <div id="table"></div>
   </div>
-
-  <h1>Overview</h1>
-
-  <!-- Filters toolbar -->
-  <div class="toolbar">
-    <label for="storeSelect"><strong>Source</strong></label>
-    <select id="storeSelect"></select>
-
-    <label for="versionSelect"><strong>Version</strong></label>
-    <select id="versionSelect"></select>
-
-    <label for="categorySelect"><strong>Category</strong></label>
-    <select id="categorySelect" multiple></select>
-
-    <button id="resetBtn">Reset</button>
-    <a id="downloadLink" class="btn" download="reviews_overview.csv" href="#">Download Reviews</a>
-  </div>
-
-  <div id="chart" style="height:420px;"></div>
-  <h3>Reviews</h3>
-  <div id="hint">Tip: Click a bar (category + sentiment). Single-click replaces; <b>Ctrl/Cmd-click</b> adds/removes. Click again to toggle.</div>
-  <div id="table"></div>
 
 <script>
+/* ====== Sidebar behavior ====== */
+(function(){
+  const body = document.body;
+  const toggleBtn = document.getElementById('sidebarToggle');
+  const overlay = document.getElementById('sidebarOverlay');
+  const STORAGE_KEY = 'sidebarCollapsed';
+
+  const saved = localStorage.getItem(STORAGE_KEY);
+  const preferCollapsed = saved === 'true' || (saved === null && window.matchMedia('(max-width: 900px)').matches);
+  setCollapsed(preferCollapsed);
+
+  function setCollapsed(collapsed){
+    body.classList.toggle('sidebar-collapsed', collapsed);
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    overlay.hidden = collapsed || !window.matchMedia('(max-width: 900px)').matches;
+    localStorage.setItem(STORAGE_KEY, String(collapsed));
+  }
+
+  toggleBtn.addEventListener('click', () => setCollapsed(!body.classList.contains('sidebar-collapsed')));
+  overlay.addEventListener('click', () => setCollapsed(true));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !body.classList.contains('sidebar-collapsed')) setCollapsed(true); });
+  window.addEventListener('resize', () => {
+    const small = window.matchMedia('(max-width: 900px)').matches;
+    overlay.hidden = body.classList.contains('sidebar-collapsed') || !small;
+  });
+})();
+
+/* ====== Overview page logic (no toast) ====== */
 const DATA_URL = 'data.json';
 
 let RAW = [];
@@ -67,7 +155,6 @@ const SENTI_MAP = { 'negative':'Negative','NEGATIVE':'Negative','LABEL_0':'Negat
                     'neutral':'Neutral','NEUTRAL':'Neutral','LABEL_1':'Neutral',
                     'positive':'Positive','POSITIVE':'Positive','LABEL_2':'Positive' };
 
-/* ---------- Utils ---------- */
 const fmtDate = s => !s ? '' : (s.length > 10 ? s.slice(0,10) : s);
 const uniq = arr => Array.from(new Set(arr));
 
@@ -123,7 +210,7 @@ function renderTable(rows, maxRows=1000) {
   tbl.innerHTML = html;
 }
 
-/* ---------- Selected store/version (chart scope only) ---------- */
+/* ---------- Scope for chart ---------- */
 function getSelectedStore(){ return document.getElementById('storeSelect').value || ''; }
 function getSelectedVersion(){ return document.getElementById('versionSelect').value || ''; }
 
@@ -139,7 +226,6 @@ function rowsForChartScope() {
 /* ---------- Table rows (clickedPairs union > dropdown) ---------- */
 function rowsForTable() {
   let arr = rowsForChartScope();
-
   if (clickedPairs.length) {
     const keyset = new Set(clickedPairs.map(p => `${p.cat}|${p.sent}`));
     return arr.filter(r => {
@@ -148,7 +234,6 @@ function rowsForTable() {
       return keyset.has(`${r.category}|${s}`);
     });
   }
-
   if (selectedGroups.length) {
     const set = new Set(selectedGroups);
     return arr.filter(r => set.has(r.category));
@@ -156,20 +241,17 @@ function rowsForTable() {
   return arr;
 }
 
-/* ---------- Category dropdown highlight from bar clicks ---------- */
+/* ---------- Sync category dropdown highlight from bar clicks ---------- */
 function syncCategorySelectFromPairs() {
   const sel = document.getElementById('categorySelect');
   const set = new Set(clickedPairs.map(p => p.cat));
-  for (const opt of sel.options) {
-    opt.selected = set.has(opt.value);
-  }
+  for (const opt of sel.options) opt.selected = set.has(opt.value);
 }
 
-/* ---------- Chart: highlight/dim ----------- */
+/* ---------- Chart highlight/dim ---------- */
 function applyHighlight() {
   const chart = document.getElementById('chart');
   if (!chart || !chart.data) return;
-
   const sentiments = ['Positive','Neutral','Negative'];
   const selectedKeys = new Set(clickedPairs.map(p => `${p.cat}|${p.sent}`));
   const opacities = sentiments.map(sent =>
@@ -181,7 +263,7 @@ function applyHighlight() {
   Plotly.restyle(chart, { 'marker.opacity': [opacities[0], opacities[1], opacities[2]] });
 }
 
-/* ---------- Chart draw (only on store/version changes) ---------- */
+/* ---------- Draw chart (store/version changes only) ---------- */
 function drawChart() {
   const rows = rowsForChartScope();
   CAT_ORDER = uniq(rows.map(r => r.category).filter(Boolean)).sort();
@@ -219,7 +301,7 @@ function drawChart() {
   });
 }
 
-/* ---------- Chart click: multi-select with Ctrl/Cmd ---------- */
+/* ---------- Bar clicks: multi-select with Ctrl/Cmd ---------- */
 function wireClickHandler() {
   const chart = document.getElementById('chart');
   chart.removeAllListeners?.('plotly_click');
@@ -244,11 +326,8 @@ function wireClickHandler() {
       }
     }
 
-    // Reflect clicked categories in the dropdown
-    syncCategorySelectFromPairs();
-
-    // Update views without redrawing the chart
-    refreshViews({ skipChart: true });
+    syncCategorySelectFromPairs();     // highlight dropdown
+    refreshViews({ skipChart: true }); // restyle + table only
   });
 }
 
@@ -265,7 +344,7 @@ function fillCategorySelect() {
 }
 function fillStoreSelect() {
   const sel = document.getElementById('storeSelect');
-  const stores = ['iOS & Android', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
+  const stores = ['Review Source', ...uniq(RAW.map(r => r.source || 'Unknown')).sort()];
   sel.innerHTML = stores.map((s, i) =>
     `<option value="${i===0 ? '' : s}">${s}</option>`
   ).join('');
@@ -339,4 +418,3 @@ fetch(DATA_URL)
 </script>
 </body>
 </html>
-
