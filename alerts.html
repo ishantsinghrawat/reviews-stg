@@ -5,8 +5,58 @@
   <title>Daily Alerts</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
-    .navbar a { margin-right:10px; }
+    /* ====== Base ====== */
+    :root { --sidebar-w: 260px; --sidebar-bg:#ffffff; --sidebar-border:#e5e7eb; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#fff; }
+
+    /* ====== Sidebar + Toggle (inside header) ====== */
+    .sidebar{
+      position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
+      background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
+      transform: translateX(0); transition: transform .22s ease;
+      display:flex; flex-direction:column;
+    }
+    .sidebar__brand{
+      font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .sidebar-toggle-inner {
+      border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; color:#333;
+    }
+    .sidebar-toggle-inner:hover { opacity:0.7; }
+
+    .sidebar__nav{ display:flex; flex-direction:column; padding:8px; gap:4px; }
+    .sidebar__nav a{ padding:10px 12px; border-radius:8px; text-decoration:none; color:#111827; }
+    .sidebar__nav a:hover{ background:#f3f4f6; }
+    .sidebar__nav a.active{ background:#1f75fe; color:#fff; }
+
+    .sidebar-overlay{ position: fixed; inset:0; background:rgba(0,0,0,.35); z-index:1040; }
+
+    .page{ margin-left: var(--sidebar-w); transition: margin-left .22s ease; padding:16px; }
+
+    /* Collapsed state */
+    body.sidebar-collapsed .sidebar{ transform: translateX(-100%); }
+    body.sidebar-collapsed .page{ margin-left: 0; }
+    body.sidebar-collapsed .sidebar-overlay{ display:none; }
+
+    /* Responsive */
+    @media (max-width: 900px){
+      body:not(.sidebar-collapsed) .sidebar-overlay{ display:block; }
+      .page{ margin-left: 0; }
+    }
+
+    /* ====== Floating reopen button (only when collapsed) ====== */
+    .sidebar-reopen {
+      position: fixed; top: 16px; left: 16px; z-index: 1100;
+      border: 1px solid #e5e7eb; background: #fff; border-radius: 10px;
+      padding: 8px 10px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      display: none; /* hidden by default */
+    }
+    .sidebar-reopen:hover { background:#f8fafc; }
+    body.sidebar-collapsed .sidebar-reopen { display: block; }
+
+    /* ====== Page UI (from your original) ====== */
+    .navbar a { margin-right:10px; } /* legacy (unused now) */
     .toolbar { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin: 10px 0 16px; }
     select { min-width: 240px; padding: 6px; }
     .meta { color:#555; margin: 6px 0 14px; }
@@ -23,41 +73,86 @@
   </style>
 </head>
 <body>
+  <!-- Overlay (click to close on small screens) -->
+  <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
 
-  <div class="navbar" style="margin-bottom:10px;">
-    <a href="index.html">🏠 Home</a>
-    <a href="home.html">🌍 Topic Clusters</a>
-    <a href="overview.html">✍ Topics Overview</a>
-    <a href="sentiment.html">🙂 Sentiments</a>
-    <a href="review_trend.html">📈 Review Trends</a>
-    <a href="rating_distribution.html">📊 Rating Distribution</a>
-    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
-    <a href="alerts.html"><b>🚨 Daily Alerts</b></a>
-  </div>
-
-  <h1>🚨 Daily Alert Reports</h1>
-
-  <div id="latestBanner" class="banner">
-    <span id="latestText">📅 Loading latest report info…</span>
-    <div class="actions">
-      <a id="latestOpen" class="btn" href="#" target="_blank" rel="noopener" disabled>Open latest</a>
-      <button id="latestJump" class="btn secondary" disabled>Jump to embedded</button>
-      <button id="latestCopy" class="btn secondary" disabled>Copy link</button>
+  <!-- Left sliding sidebar -->
+  <aside id="sidebar" class="sidebar" aria-label="Site navigation">
+    <div class="sidebar__brand">
+      📱 Reviews Dashboard
+      <button id="sidebarToggle" class="sidebar-toggle-inner" aria-controls="sidebar" title="Toggle menu">☰</button>
     </div>
-  </div>
+    <nav class="sidebar__nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="home.html">🌍 Topic Clusters</a>
+      <a href="overview.html">✍ Topics Overview</a>
+      <a href="sentiment.html">🙂 Sentiments</a>
+      <a href="review_trend.html">📈 Review Trends</a>
+      <a href="rating_distribution.html">📊 Rating Distribution</a>
+      <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+      <a class="active" href="alerts.html">🚨 Daily Alerts</a>
+    </nav>
+  </aside>
 
-  <div class="toolbar panel">
-    <div>
-      <label for="reportSelect"><strong>Select report</strong></label>
-      <select id="reportSelect"></select>
+  <!-- Floating toggle visible only when sidebar is hidden -->
+  <button id="sidebarReopen" class="sidebar-reopen" title="Show menu">☰</button>
+
+  <!-- Page content -->
+  <div class="page">
+    <h1>🚨 Daily Alert Reports</h1>
+
+    <div id="latestBanner" class="banner">
+      <span id="latestText">📅 Loading latest report info…</span>
+      <div class="actions">
+        <a id="latestOpen" class="btn" href="#" target="_blank" rel="noopener" disabled>Open latest</a>
+        <button id="latestJump" class="btn secondary" disabled>Jump to embedded</button>
+        <button id="latestCopy" class="btn secondary" disabled>Copy link</button>
+      </div>
     </div>
-    <div class="meta" id="meta"></div>
-  </div>
 
-  <div id="empty" class="muted"></div>
-  <iframe id="report" class="frame"></iframe>
+    <div class="toolbar panel">
+      <div>
+        <label for="reportSelect"><strong>Select report</strong></label>
+        <select id="reportSelect"></select>
+      </div>
+      <div class="meta" id="meta"></div>
+    </div>
+
+    <div id="empty" class="muted"></div>
+    <iframe id="report" class="frame"></iframe>
+  </div>
 
 <script>
+/* ====== Sidebar behavior (same as Overview) ====== */
+(function(){
+  const body = document.body;
+  const toggleBtn = document.getElementById('sidebarToggle');
+  const overlay = document.getElementById('sidebarOverlay');
+  const reopenBtn = document.getElementById('sidebarReopen');
+  const STORAGE_KEY = 'sidebarCollapsed';
+
+  const saved = localStorage.getItem(STORAGE_KEY);
+  const preferCollapsed = saved === 'true' || (saved === null && window.matchMedia('(max-width: 900px)').matches);
+  setCollapsed(preferCollapsed);
+
+  function setCollapsed(collapsed){
+    body.classList.toggle('sidebar-collapsed', collapsed);
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    overlay.hidden = collapsed || !window.matchMedia('(max-width: 900px)').matches;
+    localStorage.setItem(STORAGE_KEY, String(collapsed));
+  }
+
+  toggleBtn.addEventListener('click', () => setCollapsed(!body.classList.contains('sidebar-collapsed')));
+  overlay.addEventListener('click', () => setCollapsed(true));
+  reopenBtn.addEventListener('click', () => setCollapsed(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !body.classList.contains('sidebar-collapsed')) setCollapsed(true); });
+  window.addEventListener('resize', () => {
+    const small = window.matchMedia('(max-width: 900px)').matches;
+    overlay.hidden = body.classList.contains('sidebar-collapsed') || !small;
+  });
+})();
+
+/* ====== Daily Alerts logic (your original, unchanged) ====== */
 const INDEX_URL = 'reports/index.json';
 const reportSelect = document.getElementById('reportSelect');
 const meta = document.getElementById('meta');
@@ -127,7 +222,6 @@ async function showReport(i) {
   if (!item) return;
   empty.textContent = '';
   meta.textContent = `Showing report for ${item.date}`;
-  // Load the HTML report in an iframe
   frame.src = item.path + '?nocache=' + Date.now();
 }
 
