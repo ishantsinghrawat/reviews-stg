@@ -40,7 +40,7 @@ def parse_args():
     p.add_argument("--ios-only-version", default=os.getenv("IOS_ONLY_VERSION", ""))  # optional: pin iOS version
     # Date / version filters
     p.add_argument("--min-date", default=os.getenv("MIN_DATE", ""))       # e.g. 2025-01-01
-    p.add_argument("--last-days", type=int, default=int(os.getenv("LAST_DAYS", "1")))
+    p.add_argument("--last-days", type=int, default=int(os.getenv("LAST_DAYS", "30")))
     p.add_argument("--only-version", default=os.getenv("ONLY_VERSION", ""))  # optional: pin GP & iOS
     # NLP + outputs
     p.add_argument("--labels", default=os.getenv("ZS_LABELS", ",".join(DEFAULT_LABELS)))
