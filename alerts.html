@@ -151,7 +151,7 @@ overlay.hidden = body.classList.contains('sidebar-collapsed') || !small;
 });
 })();
 
-/* ====== Daily Alerts logic with SAME-DAY negative filter ====== */
+/* ====== Daily Alerts logic (reports are pre-filtered) ====== */
 const INDEX_URL = 'reports/index.json';
 const reportSelect = document.getElementById('reportSelect');
 const meta = document.getElementById('meta');
@@ -175,7 +175,8 @@ REPORTS = await r.json() || [];
 
 if (!REPORTS.length) {
 setHTML(latestText, '📅 No reports generated yet.');
-latestOpen.disabled = latestJump.disabled = latestCopy.disabled = true;
+latestOpen.setAttribute('aria-disabled', 'true');
+latestJump.disabled = latestCopy.disabled = true;
 setHTML(empty, 'No reports published yet.');
 return;
 }
@@ -183,7 +184,8 @@ return;
 const latest = REPORTS[0];
 setHTML(latestText, `📅 <strong>Latest report generated on ${latest.date}</strong>`);
 latestOpen.href = latest.path;
-latestOpen.disabled = latestJump.disabled = latestCopy.disabled = false;
+latestOpen.removeAttribute('aria-disabled');
+latestJump.disabled = latestCopy.disabled = false;
 
 latestJump.onclick = (e) => {
 e.preventDefault();
@@ -212,7 +214,8 @@ await showReport(0);
 } catch (e) {
 setHTML(latestText, `⚠️ <span class="error">Failed to load report index: ${esc(e.message)}</span>`);
 setHTML(empty, `<span class="error">Failed to load report index.</span>`);
-latestOpen.disabled = latestJump.disabled = latestCopy.disabled = true;
+latestOpen.setAttribute('aria-disabled', 'true');
+latestJump.disabled = latestCopy.disabled = true;
 }
 }
 
@@ -222,101 +225,8 @@ if (!item) return;
 empty.textContent = '';
 meta.textContent = `Showing report for ${item.date}`;
 
-// Load the HTML report in an iframe
-frame.onload = () => {
-// After the embedded report is ready, filter negative reviews to SAME DAY
-try {
-filterNegativesInFrame(item.date);
-} catch (e) {
-console.warn('Negative filter skipped:', e);
-}
-};
+// Reports are already correct by construction (pre-filtered)
 frame.src = item.path + '?nocache=' + Date.now();
-}
-
-/**
-* Filter negative reviews inside the embedded report so that
-* ONLY rows whose Date matches `dateStr` remain visible.
-* Assumptions:
-* - The report is same-origin (it is, since you load a relative path).
-* - There's a table for negative reviews, typically with a Date column.
-* - Date format is report.date (e.g., "2025-01-31") at the start of cell text.
-*/
-function filterNegativesInFrame(dateStr) {
-const doc = frame.contentDocument;
-if (!doc) return;
-
-// 1) Find likely negative review tables
-const candidates = [];
-
-// Common IDs
-['negative', 'negatives', 'negativeReviews', 'negative-reviews'].forEach(id => {
-const t = doc.getElementById(id);
-if (t && t.tagName === 'TABLE') candidates.push(t);
-});
-
-// Data attributes
-candidates.push(...doc.querySelectorAll('table[data-type="negative"], table[data-role="negative"], section[data-type="negative"] table'));
-
-// Headings like "Negative" with a table near it
-if (!candidates.length) {
-const heads = Array.from(doc.querySelectorAll('h1,h2,h3,h4')).filter(h => /negative/i.test(h.textContent));
-heads.forEach(h => {
-let t = h.nextElementSibling && h.nextElementSibling.tagName === 'TABLE' ? h.nextElementSibling : null;
-if (!t) t = h.parentElement?.querySelector('table');
-if (t) candidates.push(t);
-});
-}
-
-// Fallback: if nothing detected, take the first table in the doc
-if (!candidates.length) {
-const t = doc.querySelector('table');
-if (t) candidates.push(t);
-}
-
-// 2) For each candidate table, hide rows that don't match date
-candidates.forEach(table => {
-// Find the Date column index by header text
-const headers = Array.from(table.querySelectorAll('thead th'));
-let dateIdx = headers.findIndex(th =>
-/date/i.test(th.textContent) || /review[_\s-]?date/i.test(th.textContent)
-);
-
-// If there's no thead, try first row's th cells
-if (dateIdx === -1 && !headers.length) {
-const firstThs = Array.from(table.querySelectorAll('tr th'));
-dateIdx = firstThs.findIndex(th =>
-/date/i.test(th.textContent) || /review[_\s-]?date/i.test(th.textContent)
-);
-}
-
-// Reasonable fallback if still unknown
-if (dateIdx === -1) dateIdx = 2; // e.g., 3rd column
-
-const bodyRows = Array.from(table.tBodies?.[0]?.rows || table.querySelectorAll('tbody tr'));
-let kept = 0;
-bodyRows.forEach(tr => {
-const td = tr.cells[dateIdx];
-const txt = (td?.textContent || '').trim();
-const match = txt.startsWith(dateStr) || txt.includes(dateStr);
-tr.style.display = match ? '' : 'none';
-if (match) kept++;
-});
-
-// Optionally: show a small note above the table inside the report
-if (table && kept >= 0) {
-let note = table.previousElementSibling;
-const msg = `Showing negative reviews for ${dateStr} (${kept} found)`;
-if (!note || note.tagName.toLowerCase().startsWith('table')) {
-note = doc.createElement('div');
-table.parentNode.insertBefore(note, table);
-}
-note.style.fontSize = '12px';
-note.style.color = '#555';
-note.style.margin = '6px 0';
-note.textContent = msg;
-}
-});
 }
 
 loadIndex();
