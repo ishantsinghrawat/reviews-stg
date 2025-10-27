@@ -1,158 +1,157 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>Daily Alerts</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    /* ====== Base ====== */
-    :root { --sidebar-w: 260px; --sidebar-bg:#ffffff; --sidebar-border:#e5e7eb; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#fff; }
+<meta charset="utf-8" />
+<title>Daily Alerts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+/* ====== Base ====== */
+:root { --sidebar-w: 260px; --sidebar-bg:#ffffff; --sidebar-border:#e5e7eb; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#fff; }
 
-    /* ====== Sidebar + Toggle (inside header) ====== */
-    .sidebar{
-      position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
-      background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
-      transform: translateX(0); transition: transform .22s ease;
-      display:flex; flex-direction:column;
-    }
-    .sidebar__brand{
-      font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
-      display:flex; align-items:center; justify-content:space-between;
-    }
-    .sidebar-toggle-inner {
-      border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; color:#333;
-    }
-    .sidebar-toggle-inner:hover { opacity:0.7; }
+/* ====== Sidebar + Toggle (inside header) ====== */
+.sidebar{
+position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
+background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
+transform: translateX(0); transition: transform .22s ease;
+display:flex; flex-direction:column;
+}
+.sidebar__brand{
+font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
+display:flex; align-items:center; justify-content:space-between;
+}
+.sidebar-toggle-inner {
+border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; color:#333;
+}
+.sidebar-toggle-inner:hover { opacity:0.7; }
 
-    .sidebar__nav{ display:flex; flex-direction:column; padding:8px; gap:4px; }
-    .sidebar__nav a{ padding:10px 12px; border-radius:8px; text-decoration:none; color:#111827; }
-    .sidebar__nav a:hover{ background:#f3f4f6; }
-    .sidebar__nav a.active{ background:#1f75fe; color:#fff; }
+.sidebar__nav{ display:flex; flex-direction:column; padding:8px; gap:4px; }
+.sidebar__nav a{ padding:10px 12px; border-radius:8px; text-decoration:none; color:#111827; }
+.sidebar__nav a:hover{ background:#f3f4f6; }
+.sidebar__nav a.active{ background:#1f75fe; color:#fff; }
 
-    .sidebar-overlay{ position: fixed; inset:0; background:rgba(0,0,0,.35); z-index:1040; }
+.sidebar-overlay{ position: fixed; inset:0; background:rgba(0,0,0,.35); z-index:1040; }
 
-    .page{ margin-left: var(--sidebar-w); transition: margin-left .22s ease; padding:16px; }
+.page{ margin-left: var(--sidebar-w); transition: margin-left .22s ease; padding:16px; }
 
-    /* Collapsed state */
-    body.sidebar-collapsed .sidebar{ transform: translateX(-100%); }
-    body.sidebar-collapsed .page{ margin-left: 0; }
-    body.sidebar-collapsed .sidebar-overlay{ display:none; }
+/* Collapsed state */
+body.sidebar-collapsed .sidebar{ transform: translateX(-100%); }
+body.sidebar-collapsed .page{ margin-left: 0; }
+body.sidebar-collapsed .sidebar-overlay{ display:none; }
 
-    /* Responsive */
-    @media (max-width: 900px){
-      body:not(.sidebar-collapsed) .sidebar-overlay{ display:block; }
-      .page{ margin-left: 0; }
-    }
+/* Responsive */
+@media (max-width: 900px){
+body:not(.sidebar-collapsed) .sidebar-overlay{ display:block; }
+.page{ margin-left: 0; }
+}
 
-    /* ====== Floating reopen button (only when collapsed) ====== */
-    .sidebar-reopen {
-      position: fixed; top: 16px; left: 16px; z-index: 1100;
-      border: 1px solid #e5e7eb; background: #fff; border-radius: 10px;
-      padding: 8px 10px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.06);
-      display: none; /* hidden by default */
-    }
-    .sidebar-reopen:hover { background:#f8fafc; }
-    body.sidebar-collapsed .sidebar-reopen { display: block; }
+/* ====== Floating reopen button (only when collapsed) ====== */
+.sidebar-reopen {
+position: fixed; top: 16px; left: 16px; z-index: 1100;
+border: 1px solid #e5e7eb; background: #fff; border-radius: 10px;
+padding: 8px 10px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+display: none; /* hidden by default */
+}
+.sidebar-reopen:hover { background:#f8fafc; }
+body.sidebar-collapsed .sidebar-reopen { display: block; }
 
-    /* ====== Page UI (from your original) ====== */
-    .navbar a { margin-right:10px; } /* legacy (unused now) */
-    .toolbar { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin: 10px 0 16px; }
-    select { min-width: 240px; padding: 6px; }
-    .meta { color:#555; margin: 6px 0 14px; }
-    .panel { padding: 12px 14px; background: #f6f7f9; border-radius: 10px; }
-    #report { margin-top: 14px; }
-    .muted { color:#777; }
-    .error { color:#b00020; }
-    .banner { background:#e8f0fe; border:1px solid #c6dafc; border-radius:8px; padding:10px 14px; margin:10px 0 20px; color:#1a73e8; font-weight:500; display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; }
-    .actions { display:flex; gap:8px; flex-wrap: wrap; }
-    .btn { appearance:none; border:1px solid #c6dafc; background:#1a73e8; color:white; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600; text-decoration:none; }
-    .btn.secondary { background:#f6f7f9; color:#1a73e8; border-color:#c6dafc; }
-    .btn:disabled { opacity:.5; cursor:not-allowed; }
-    .frame { border:1px solid #eee; border-radius:10px; width:100%; min-height:60vh; }
-  </style>
+/* ====== Page UI ====== */
+.toolbar { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin: 10px 0 16px; }
+select { min-width: 240px; padding: 6px; }
+.meta { color:#555; margin: 6px 0 14px; }
+.panel { padding: 12px 14px; background: #f6f7f9; border-radius: 10px; }
+#report { margin-top: 14px; }
+.muted { color:#777; }
+.error { color:#b00020; }
+.banner { background:#e8f0fe; border:1px solid #c6dafc; border-radius:8px; padding:10px 14px; margin:10px 0 20px; color:#1a73e8; font-weight:500; display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; }
+.actions { display:flex; gap:8px; flex-wrap: wrap; }
+.btn { appearance:none; border:1px solid #c6dafc; background:#1a73e8; color:white; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600; text-decoration:none; }
+.btn.secondary { background:#f6f7f9; color:#1a73e8; border-color:#c6dafc; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.frame { border:1px solid #eee; border-radius:10px; width:100%; min-height:60vh; }
+</style>
 </head>
 <body>
-  <!-- Overlay (click to close on small screens) -->
-  <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
+<!-- Overlay (click to close on small screens) -->
+<div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
 
-  <!-- Left sliding sidebar -->
-  <aside id="sidebar" class="sidebar" aria-label="Site navigation">
-    <div class="sidebar__brand">
-      📱 Reviews Dashboard
-      <button id="sidebarToggle" class="sidebar-toggle-inner" aria-controls="sidebar" title="Toggle menu">☰</button>
-    </div>
-    <nav class="sidebar__nav">
-      <a href="index.html">🏠 Home</a>
-      <a href="home.html">🌍 Topic Clusters</a>
-      <a href="overview.html">✍ Topics Overview</a>
-      <a href="sentiment.html">🙂 Sentiments</a>
-      <a href="review_trend.html">📈 Review Trends</a>
-      <a href="rating_distribution.html">📊 Rating Distribution</a>
-      <a href="avg_rating.html">⭐ Avg Rating by Version</a>
-      <a class="active" href="alerts.html">🚨 Daily Alerts</a>
-    </nav>
-  </aside>
+<!-- Left sliding sidebar -->
+<aside id="sidebar" class="sidebar" aria-label="Site navigation">
+<div class="sidebar__brand">
+📱 Reviews Dashboard
+<button id="sidebarToggle" class="sidebar-toggle-inner" aria-controls="sidebar" title="Toggle menu">☰</button>
+</div>
+<nav class="sidebar__nav">
+<a href="index.html">🏠 Home</a>
+<a href="home.html">🌍 Topic Clusters</a>
+<a href="overview.html">✍ Topics Overview</a>
+<a href="sentiment.html">🙂 Sentiments</a>
+<a href="review_trend.html">📈 Review Trends</a>
+<a href="rating_distribution.html">📊 Rating Distribution</a>
+<a href="avg_rating.html">⭐ Avg Rating by Version</a>
+<a class="active" href="alerts.html">🚨 Daily Alerts</a>
+</nav>
+</aside>
 
-  <!-- Floating toggle visible only when sidebar is hidden -->
-  <button id="sidebarReopen" class="sidebar-reopen" title="Show menu">☰</button>
+<!-- Floating toggle visible only when sidebar is hidden -->
+<button id="sidebarReopen" class="sidebar-reopen" title="Show menu">☰</button>
 
-  <!-- Page content -->
-  <div class="page">
-    <h1>🚨 Daily Alert Reports</h1>
+<!-- Page content -->
+<div class="page">
+<h1>🚨 Daily Alert Reports</h1>
 
-    <div id="latestBanner" class="banner">
-      <span id="latestText">📅 Loading latest report info…</span>
-      <div class="actions">
-        <a id="latestOpen" class="btn" href="#" target="_blank" rel="noopener" disabled>Open latest</a>
-        <button id="latestJump" class="btn secondary" disabled>Jump to embedded</button>
-        <button id="latestCopy" class="btn secondary" disabled>Copy link</button>
-      </div>
-    </div>
+<div id="latestBanner" class="banner">
+<span id="latestText">📅 Loading latest report info…</span>
+<div class="actions">
+<a id="latestOpen" class="btn" href="#" target="_blank" rel="noopener" disabled>Open latest</a>
+<button id="latestJump" class="btn secondary" disabled>Jump to embedded</button>
+<button id="latestCopy" class="btn secondary" disabled>Copy link</button>
+</div>
+</div>
 
-    <div class="toolbar panel">
-      <div>
-        <label for="reportSelect"><strong>Select report</strong></label>
-        <select id="reportSelect"></select>
-      </div>
-      <div class="meta" id="meta"></div>
-    </div>
+<div class="toolbar panel">
+<div>
+<label for="reportSelect"><strong>Select report</strong></label>
+<select id="reportSelect"></select>
+</div>
+<div class="meta" id="meta"></div>
+</div>
 
-    <div id="empty" class="muted"></div>
-    <iframe id="report" class="frame"></iframe>
-  </div>
+<div id="empty" class="muted"></div>
+<iframe id="report" class="frame"></iframe>
+</div>
 
 <script>
-/* ====== Sidebar behavior (same as Overview) ====== */
+/* ====== Sidebar behavior ====== */
 (function(){
-  const body = document.body;
-  const toggleBtn = document.getElementById('sidebarToggle');
-  const overlay = document.getElementById('sidebarOverlay');
-  const reopenBtn = document.getElementById('sidebarReopen');
-  const STORAGE_KEY = 'sidebarCollapsed';
+const body = document.body;
+const toggleBtn = document.getElementById('sidebarToggle');
+const overlay = document.getElementById('sidebarOverlay');
+const reopenBtn = document.getElementById('sidebarReopen');
+const STORAGE_KEY = 'sidebarCollapsed';
 
-  const saved = localStorage.getItem(STORAGE_KEY);
-  const preferCollapsed = saved === 'true' || (saved === null && window.matchMedia('(max-width: 900px)').matches);
-  setCollapsed(preferCollapsed);
+const saved = localStorage.getItem(STORAGE_KEY);
+const preferCollapsed = saved === 'true' || (saved === null && window.matchMedia('(max-width: 900px)').matches);
+setCollapsed(preferCollapsed);
 
-  function setCollapsed(collapsed){
-    body.classList.toggle('sidebar-collapsed', collapsed);
-    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
-    overlay.hidden = collapsed || !window.matchMedia('(max-width: 900px)').matches;
-    localStorage.setItem(STORAGE_KEY, String(collapsed));
-  }
+function setCollapsed(collapsed){
+body.classList.toggle('sidebar-collapsed', collapsed);
+toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+overlay.hidden = collapsed || !window.matchMedia('(max-width: 900px)').matches;
+localStorage.setItem(STORAGE_KEY, String(collapsed));
+}
 
-  toggleBtn.addEventListener('click', () => setCollapsed(!body.classList.contains('sidebar-collapsed')));
-  overlay.addEventListener('click', () => setCollapsed(true));
-  reopenBtn.addEventListener('click', () => setCollapsed(false));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !body.classList.contains('sidebar-collapsed')) setCollapsed(true); });
-  window.addEventListener('resize', () => {
-    const small = window.matchMedia('(max-width: 900px)').matches;
-    overlay.hidden = body.classList.contains('sidebar-collapsed') || !small;
-  });
+toggleBtn.addEventListener('click', () => setCollapsed(!body.classList.contains('sidebar-collapsed')));
+overlay.addEventListener('click', () => setCollapsed(true));
+reopenBtn.addEventListener('click', () => setCollapsed(false));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !body.classList.contains('sidebar-collapsed')) setCollapsed(true); });
+window.addEventListener('resize', () => {
+const small = window.matchMedia('(max-width: 900px)').matches;
+overlay.hidden = body.classList.contains('sidebar-collapsed') || !small;
+});
 })();
 
-/* ====== Daily Alerts logic (your original, unchanged) ====== */
+/* ====== Daily Alerts logic with SAME-DAY negative filter ====== */
 const INDEX_URL = 'reports/index.json';
 const reportSelect = document.getElementById('reportSelect');
 const meta = document.getElementById('meta');
@@ -169,60 +168,155 @@ function setHTML(el, html) { el.innerHTML = html; }
 function esc(s) { return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
 async function loadIndex() {
-  try {
-    const r = await fetch(INDEX_URL + '?nocache=' + Date.now());
-    if (!r.ok) throw new Error(`index not found`);
-    REPORTS = await r.json() || [];
+try {
+const r = await fetch(INDEX_URL + '?nocache=' + Date.now());
+if (!r.ok) throw new Error(`index not found`);
+REPORTS = await r.json() || [];
 
-    if (!REPORTS.length) {
-      setHTML(latestText, '📅 No reports generated yet.');
-      latestOpen.disabled = latestJump.disabled = latestCopy.disabled = true;
-      setHTML(empty, 'No reports published yet.');
-      return;
-    }
+if (!REPORTS.length) {
+setHTML(latestText, '📅 No reports generated yet.');
+latestOpen.disabled = latestJump.disabled = latestCopy.disabled = true;
+setHTML(empty, 'No reports published yet.');
+return;
+}
 
-    const latest = REPORTS[0];
-    setHTML(latestText, `📅 <strong>Latest report generated on ${latest.date}</strong>`);
-    latestOpen.href = latest.path;
-    latestOpen.disabled = latestJump.disabled = latestCopy.disabled = false;
+const latest = REPORTS[0];
+setHTML(latestText, `📅 <strong>Latest report generated on ${latest.date}</strong>`);
+latestOpen.href = latest.path;
+latestOpen.disabled = latestJump.disabled = latestCopy.disabled = false;
 
-    latestJump.onclick = (e) => {
-      e.preventDefault();
-      reportSelect.value = '0';
-      showReport(0).then(() => {
-        frame.scrollIntoView({ behavior: 'smooth' });
-      });
-    };
-    latestCopy.onclick = async (e) => {
-      e.preventDefault();
-      const abs = new URL(latest.path, window.location.href).href;
-      try { await navigator.clipboard.writeText(abs); latestCopy.textContent = 'Copied!'; }
-      catch { latestCopy.textContent = 'Copy failed'; }
-      setTimeout(() => latestCopy.textContent = 'Copy link', 1200);
-    };
+latestJump.onclick = (e) => {
+e.preventDefault();
+reportSelect.value = '0';
+showReport(0).then(() => {
+frame.scrollIntoView({ behavior: 'smooth' });
+});
+};
+latestCopy.onclick = async (e) => {
+e.preventDefault();
+const abs = new URL(latest.path, window.location.href).href;
+try { await navigator.clipboard.writeText(abs); latestCopy.textContent = 'Copied!'; }
+catch { latestCopy.textContent = 'Copy failed'; }
+setTimeout(() => latestCopy.textContent = 'Copy link', 1200);
+};
 
-    reportSelect.innerHTML = REPORTS.map((x, i) =>
-      `<option value="${i}">${x.date}</option>`
-    ).join('');
-    reportSelect.addEventListener('change', () => {
-      const i = parseInt(reportSelect.value, 10);
-      if (!isNaN(i)) showReport(i);
-    });
-    reportSelect.value = '0';
-    await showReport(0);
-  } catch (e) {
-    setHTML(latestText, `⚠️ <span class="error">Failed to load report index: ${esc(e.message)}</span>`);
-    setHTML(empty, `<span class="error">Failed to load report index.</span>`);
-    latestOpen.disabled = latestJump.disabled = latestCopy.disabled = true;
-  }
+reportSelect.innerHTML = REPORTS.map((x, i) =>
+`<option value="${i}">${x.date}</option>`
+).join('');
+reportSelect.addEventListener('change', () => {
+const i = parseInt(reportSelect.value, 10);
+if (!isNaN(i)) showReport(i);
+});
+reportSelect.value = '0';
+await showReport(0);
+} catch (e) {
+setHTML(latestText, `⚠️ <span class="error">Failed to load report index: ${esc(e.message)}</span>`);
+setHTML(empty, `<span class="error">Failed to load report index.</span>`);
+latestOpen.disabled = latestJump.disabled = latestCopy.disabled = true;
+}
 }
 
 async function showReport(i) {
-  const item = REPORTS[i];
-  if (!item) return;
-  empty.textContent = '';
-  meta.textContent = `Showing report for ${item.date}`;
-  frame.src = item.path + '?nocache=' + Date.now();
+const item = REPORTS[i];
+if (!item) return;
+empty.textContent = '';
+meta.textContent = `Showing report for ${item.date}`;
+
+// Load the HTML report in an iframe
+frame.onload = () => {
+// After the embedded report is ready, filter negative reviews to SAME DAY
+try {
+filterNegativesInFrame(item.date);
+} catch (e) {
+console.warn('Negative filter skipped:', e);
+}
+};
+frame.src = item.path + '?nocache=' + Date.now();
+}
+
+/**
+* Filter negative reviews inside the embedded report so that
+* ONLY rows whose Date matches `dateStr` remain visible.
+* Assumptions:
+* - The report is same-origin (it is, since you load a relative path).
+* - There's a table for negative reviews, typically with a Date column.
+* - Date format is report.date (e.g., "2025-01-31") at the start of cell text.
+*/
+function filterNegativesInFrame(dateStr) {
+const doc = frame.contentDocument;
+if (!doc) return;
+
+// 1) Find likely negative review tables
+const candidates = [];
+
+// Common IDs
+['negative', 'negatives', 'negativeReviews', 'negative-reviews'].forEach(id => {
+const t = doc.getElementById(id);
+if (t && t.tagName === 'TABLE') candidates.push(t);
+});
+
+// Data attributes
+candidates.push(...doc.querySelectorAll('table[data-type="negative"], table[data-role="negative"], section[data-type="negative"] table'));
+
+// Headings like "Negative" with a table near it
+if (!candidates.length) {
+const heads = Array.from(doc.querySelectorAll('h1,h2,h3,h4')).filter(h => /negative/i.test(h.textContent));
+heads.forEach(h => {
+let t = h.nextElementSibling && h.nextElementSibling.tagName === 'TABLE' ? h.nextElementSibling : null;
+if (!t) t = h.parentElement?.querySelector('table');
+if (t) candidates.push(t);
+});
+}
+
+// Fallback: if nothing detected, take the first table in the doc
+if (!candidates.length) {
+const t = doc.querySelector('table');
+if (t) candidates.push(t);
+}
+
+// 2) For each candidate table, hide rows that don't match date
+candidates.forEach(table => {
+// Find the Date column index by header text
+const headers = Array.from(table.querySelectorAll('thead th'));
+let dateIdx = headers.findIndex(th =>
+/date/i.test(th.textContent) || /review[_\s-]?date/i.test(th.textContent)
+);
+
+// If there's no thead, try first row's th cells
+if (dateIdx === -1 && !headers.length) {
+const firstThs = Array.from(table.querySelectorAll('tr th'));
+dateIdx = firstThs.findIndex(th =>
+/date/i.test(th.textContent) || /review[_\s-]?date/i.test(th.textContent)
+);
+}
+
+// Reasonable fallback if still unknown
+if (dateIdx === -1) dateIdx = 2; // e.g., 3rd column
+
+const bodyRows = Array.from(table.tBodies?.[0]?.rows || table.querySelectorAll('tbody tr'));
+let kept = 0;
+bodyRows.forEach(tr => {
+const td = tr.cells[dateIdx];
+const txt = (td?.textContent || '').trim();
+const match = txt.startsWith(dateStr) || txt.includes(dateStr);
+tr.style.display = match ? '' : 'none';
+if (match) kept++;
+});
+
+// Optionally: show a small note above the table inside the report
+if (table && kept >= 0) {
+let note = table.previousElementSibling;
+const msg = `Showing negative reviews for ${dateStr} (${kept} found)`;
+if (!note || note.tagName.toLowerCase().startsWith('table')) {
+note = doc.createElement('div');
+table.parentNode.insertBefore(note, table);
+}
+note.style.fontSize = '12px';
+note.style.color = '#555';
+note.style.margin = '6px 0';
+note.textContent = msg;
+}
+});
 }
 
 loadIndex();
