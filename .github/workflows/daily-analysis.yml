@@ -2,7 +2,7 @@ name: Daily review analysis (Google Play) → JSON + alert
 
 on:
   schedule:
-    - cron: "0 11 * * *"     # 11:00 UTC daily (07:00 Toronto during EDT)
+    - cron: "0 11 * * *"     # 11:00 UTC daily (07:00 Toronto during EDT; 06:00 during EST)
   workflow_dispatch: {}
 
 permissions:
@@ -42,8 +42,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # BUILD: produce new_data.json (and optional reviews.json). Do NOT overwrite data.json here.
-      - name: Build new_data.json (GP + iOS → NLP, last 30 days)
+      # ─────────────────────────────────────────────────────────────────────
+      # BUILD: produce TWO datasets
+      #   1) new_data_30d.json → promoted to data.json (site/dashboard)
+      #   2) new_data_1d.json  → promoted to data_1d.json (alert compare baseline)
+      # Do NOT overwrite data.json/data_1d.json here.
+      # ─────────────────────────────────────────────────────────────────────
+
+      - name: Build 30-day dataset (GP + iOS → NLP, last 30 days)
         env:
           # Google Play
           GP_PACKAGE: com.mcdonalds.superapp
@@ -59,7 +65,7 @@ jobs:
           IOS_ONLY_VERSION: ""       # optional (pins only iOS if set)
 
           # Date window
-          LAST_DAYS: "30"            # pull only the last month
+          LAST_DAYS: "30"            # 30-day window for site/dashboard
 
           # NLP labels & caches
           ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery"
@@ -69,20 +75,56 @@ jobs:
           HF_HUB_DISABLE_TELEMETRY: 1
           TOKENIZERS_PARALLELISM: false
         run: |
+          set -e
           python scripts/build_reviews_json.py \
-            --out-new new_data.json \
-            --out-reviews reviews.json   # optional artifact for inspection
+            --out-new new_data_30d.json \
+            --out-reviews reviews_30d.json   # optional artifact for inspection
 
-      - name: Ensure baseline data.json exists
+      - name: Build 1-day dataset (GP + iOS → NLP, last 1 day)
+        env:
+          # Google Play
+          GP_PACKAGE: com.mcdonalds.superapp
+          GP_COUNTRY: ca
+          GP_LANG: en
+          ONLY_VERSION: ""           # optional (pins both stores if set)
+
+          # App Store
+          INCLUDE_APPSTORE: "true"
+          IOS_APP_ID: "375695000"
+          IOS_COUNTRY: "ca"
+          IOS_LANG: "en"
+          IOS_ONLY_VERSION: ""       # optional (pins only iOS if set)
+
+          # Date window
+          LAST_DAYS: "1"             # 1-day window for day-over-day alerts
+
+          # NLP labels & caches
+          ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery"
+          HF_HOME: ${{ runner.temp }}/hf_home
+          TRANSFORMERS_CACHE: ${{ runner.temp }}/hf_home
+          HF_HUB_DISABLE_SYMLINKS: "1"
+          HF_HUB_DISABLE_TELEMETRY: 1
+          TOKENIZERS_PARALLELISM: false
+        run: |
+          set -e
+          python scripts/build_reviews_json.py \
+            --out-new new_data_1d.json \
+            --out-reviews reviews_1d.json     # optional artifact for inspection
+
+      # Ensure baselines exist for BOTH timelines
+      - name: Ensure baseline data files exist
         run: |
           [[ -f data.json ]] || echo "[]" > data.json
+          [[ -f data_1d.json ]] || echo "[]" > data_1d.json
 
-      - name: Compare negative sentiment vs current data.json
+      # Compare TODAY vs YESTERDAY using the 1-day files only
+      - name: Compare negative sentiment (1-day → day-over-day)
         id: compare
         run: |
+          set -e
           python scripts/compare_negatives.py \
-            --current data.json \
-            --new new_data.json \
+            --current data_1d.json \
+            --new new_data_1d.json \
             --report delta_report.md \
             --threshold-abs 1 \
             --threshold-rel 0.1
@@ -123,29 +165,50 @@ jobs:
 
           git add reports .nojekyll || true
 
-      # Promote AFTER compare; replace only if file content differs
-      - name: Promote new_data.json → data.json (if different)
+      # ─────────────────────────────────────────────────────────────────────
+      # Promote AFTER compare:
+      #   - new_data_30d.json → data.json     (site/dashboard stays 30-day)
+      #   - new_data_1d.json  → data_1d.json  (baseline for next day's alert)
+      # Only replace if content differs.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Promote JSONs (30d → data.json, 1d → data_1d.json)
         run: |
           set -e
-          if [ -f new_data.json ]; then
-            if [ ! -f data.json ] || ! cmp -s new_data.json data.json; then
-              echo "Replacing data.json with new_data.json"
-              mv new_data.json data.json
+
+          # 30-day promotion for the website/dashboard
+          if [ -f new_data_30d.json ]; then
+            if [ ! -f data.json ] || ! cmp -s new_data_30d.json data.json; then
+              echo "Replacing data.json with new_data_30d.json"
+              mv new_data_30d.json data.json
               git add data.json || true
             else
-              echo "data.json unchanged; removing new_data.json."
-              rm -f new_data.json
+              echo "data.json unchanged; removing new_data_30d.json."
+              rm -f new_data_30d.json
             fi
           else
-            echo "new_data.json not found; skipping promote."
+            echo "new_data_30d.json not found; skipping 30-day promote."
           fi
 
-      - name: Commit site artifacts (data.json + reports)
+          # 1-day promotion for next day's alert baseline
+          if [ -f new_data_1d.json ]; then
+            if [ ! -f data_1d.json ] || ! cmp -s new_data_1d.json data_1d.json; then
+              echo "Replacing data_1d.json with new_data_1d.json"
+              mv new_data_1d.json data_1d.json
+              git add data_1d.json || true
+            else
+              echo "data_1d.json unchanged; removing new_data_1d.json."
+              rm -f new_data_1d.json
+            fi
+          else
+            echo "new_data_1d.json not found; skipping 1-day promote."
+          fi
+
+      - name: Commit site artifacts (data.json + data_1d.json + reports)
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --cached --quiet && echo "No changes to commit." || git commit -m "chore: refresh data & publish daily report"
+          git diff --cached --quiet && echo "No changes to commit." || git commit -m "chore: refresh data (30d/1d) & publish daily report"
           git push || true
 
       - name: Create daily alert issue (new per day)
