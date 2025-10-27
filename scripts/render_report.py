@@ -1,46 +1,185 @@
-# scripts/render_report.py
-import sys
-import pathlib
+# scripts/build_reports_index.py
+import os
+import re
+import json
+import glob
+from pathlib import Path
+from datetime import datetime
 
+REPORT_DIR = Path("reports")
+REPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+# --- Date parsing helpers ----------------------------------------------------
+
+# Try to coerce a date-like string into YYYY-MM-DD
+def normalize_date(s: str) -> str | None:
+if not s:
+return None
+s = s.strip()
+
+# 1) YYYY-MM-DD (or with slashes)
+m = re.search(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", s)
+if m:
+y, mo, d = m.groups()
 try:
-    import markdown  # pip install markdown
-except ImportError:
-    sys.stderr.write("Missing 'markdown' package. Add 'markdown' to requirements.txt\n")
-    sys.exit(1)
+return datetime(int(y), int(mo), int(d)).strftime("%Y-%m-%d")
+except ValueError:
+return None
 
-STYLE = """
-<style>
-body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:0; }
-.main { max-width: 980px; margin: 24px auto; padding: 0 16px; }
-table { border-collapse: collapse; width:100%; font-size: 14px; }
-th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; }
-th { background: #fafafa; }
-code, pre { background:#f6f7f9; border-radius:6px; padding:2px 4px; }
-h1,h2,h3 { margin-top: 1.2em; }
-</style>
+# 2) YYYYMMDD
+m = re.search(r"\b(\d{4})(\d{2})(\d{2})\b", s)
+if m:
+y, mo, d = m.groups()
+try:
+return datetime(int(y), int(mo), int(d)).strftime("%Y-%m-%d")
+except ValueError:
+return None
+
+# 3) D Mon YYYY or Mon D, YYYY
+# e.g., "27 Oct 2025" or "Oct 27, 2025"
+m = re.search(
+r"(?:(\d{1,2})\s+([A-Za-z]{3,})\s*,?\s*(\d{4}))|"
+r"(([A-Za-z]{3,})\s+(\d{1,2}),?\s*(\d{4}))",
+s,
+)
+months = {
+"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+"jul": 7, "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12
+}
+if m:
+if m.group(1) and m.group(2) and m.group(3):
+# D Mon YYYY
+d = int(m.group(1))
+mo = months.get(m.group(2)[:3].lower())
+y = int(m.group(3))
+else:
+# Mon D, YYYY
+mo = months.get(m.group(5)[:3].lower())
+d = int(m.group(6))
+y = int(m.group(7))
+if mo:
+try:
+return datetime(y, mo, d).strftime("%Y-%m-%d")
+except ValueError:
+return None
+
+return None
+
+
+def extract_date_from_meta(html_text: str) -> str | None:
+# <meta name="report-date" content="YYYY-MM-DD">
+m = re.search(
+r'<meta[^>]+name=["\']report-date["\'][^>]*content=["\']([^"\']+)["\']',
+html_text, flags=re.IGNORECASE,
+)
+if m:
+return normalize_date(m.group(1))
+return None
+
+
+def extract_date_from_heading(html_text: str) -> str | None:
+# e.g., <h2>Negative reviews for 2025-10-27</h2>
+m = re.search(r"Negative\s+reviews\s+for\s+([^<\n]+)", html_text, flags=re.IGNORECASE)
+if m:
+return normalize_date(m.group(1))
+return None
+
+
+def extract_date_from_filename(name: str) -> str | None:
 """
-
-HTML_WRAP = """<!doctype html>
-<html><head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Daily Alert Report</title>
-{style}
-</head><body>
-<div class="main">
-{body}
-</div>
-</body></html>
+Try a few filename patterns:
+report_YYYY-MM-DD.html
+YYYY-MM-DD.html
+daily-YYYYMMDD.html
+anything-YYYY-MM-DD-*.html
 """
+base = Path(name).name
 
-def main(inp, outp):
-    md = pathlib.Path(inp).read_text(encoding="utf-8")
-    html_body = markdown.markdown(md, extensions=["tables", "fenced_code"])
-    doc = HTML_WRAP.format(style=STYLE, body=html_body)
-    pathlib.Path(outp).write_text(doc, encoding="utf-8")
+# report_YYYY-MM-DD.html or anyprefix_YYYY-MM-DD.html
+m = re.search(r"(\d{4})-(\d{2})-(\d{2})", base)
+if m:
+y, mo, d = m.groups()
+try:
+return datetime(int(y), int(mo), int(d)).strftime("%Y-%m-%d")
+except ValueError:
+pass
+
+# daily-YYYYMMDD.html or *YYYYMMDD*.html
+m = re.search(r"\b(\d{4})(\d{2})(\d{2})\b", base)
+if m:
+y, mo, d = m.groups()
+try:
+return datetime(int(y), int(mo), int(d)).strftime("%Y-%m-%d")
+except ValueError:
+pass
+
+# pure stem is a date (e.g., 2025-10-27.html)
+stem = Path(base).stem
+dt = normalize_date(stem)
+if dt:
+return dt
+
+return None
+
+
+# --- Build index -------------------------------------------------------------
+
+def main() -> None:
+# Find all HTML reports (support nested dirs), exclude index.html
+html_paths = [
+p for p in REPORT_DIR.rglob("*.html")
+if p.name.lower() != "index.html"
+]
+
+items: list[dict] = []
+
+for p in html_paths:
+try:
+text = p.read_text(encoding="utf-8", errors="ignore")
+except Exception:
+text = ""
+
+# Priority 1: meta
+date = extract_date_from_meta(text)
+
+# Priority 2: filename patterns
+if not date:
+date = extract_date_from_filename(p.name)
+
+# Priority 3: headings fallback
+if not date and text:
+date = extract_date_from_heading(text)
+
+if not date:
+# Skip files without any recognizable date
+# (alternatively, you could log and continue including them).
+# print(f"Skipping {p} (no date found)")
+continue
+
+rel_path = p.relative_to(Path(".")).as_posix()
+# Ensure path starts with 'reports/' for your alerts page
+if not rel_path.startswith("reports/"):
+rel_path = f"reports/{p.name}"
+
+items.append({
+"date": date, # normalized YYYY-MM-DD
+"path": rel_path # e.g., reports/report_2025-10-27.html
+})
+
+# Sort by *actual date* descending
+def sort_key(obj):
+try:
+return datetime.strptime(obj["date"], "%Y-%m-%d")
+except Exception:
+return datetime.min
+
+items.sort(key=sort_key, reverse=True)
+
+out_path = REPORT_DIR / "index.json"
+out_path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+print(f"Wrote index with {len(items)} entries -> {out_path.as_posix()}")
+
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python scripts/render_report.py <input.md> <output.html>")
-        sys.exit(2)
-    main(sys.argv[1], sys.argv[2])
+main()
