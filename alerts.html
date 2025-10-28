@@ -1,44 +1,182 @@
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Daily Alerts</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>
-/* ====== Base ====== */
-:root { --sidebar-w: 260px; --sidebar-bg:#ffffff; --sidebar-border:#e5e7eb; }
-body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#fff; }
+<script>
+/* ====== Sidebar behavior (unchanged) ====== */
+(function(){
+  const body = document.body;
+  const toggleBtn = document.getElementById('sidebarToggle');
+  const overlay = document.getElementById('sidebarOverlay');
+  const reopenBtn = document.getElementById('sidebarReopen');
+  const STORAGE_KEY = 'sidebarCollapsed';
 
-/* ====== Sidebar + Toggle (inside header) ====== */
-.sidebar{
-  position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
-  background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
-  transform: translateX(0); transition: transform .22s ease;
-  display:flex; flex-direction:column;
+  const saved = localStorage.getItem(STORAGE_KEY);
+  const preferCollapsed = saved === 'true' || (saved === null && window.matchMedia('(max-width: 900px)').matches);
+  setCollapsed(preferCollapsed);
+
+  function setCollapsed(collapsed){
+    body.classList.toggle('sidebar-collapsed', collapsed);
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    overlay.hidden = collapsed || !window.matchMedia('(max-width: 900px)').matches;
+    localStorage.setItem(STORAGE_KEY, String(collapsed));
+  }
+
+  toggleBtn.addEventListener('click', () => setCollapsed(!body.classList.contains('sidebar-collapsed')));
+  overlay.addEventListener('click', () => setCollapsed(true));
+  reopenBtn.addEventListener('click', () => setCollapsed(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !body.classList.contains('sidebar-collapsed')) setCollapsed(true); });
+  window.addEventListener('resize', () => {
+    const small = window.matchMedia('(max-width: 900px)').matches;
+    overlay.hidden = body.classList.contains('sidebar-collapsed') || !small;
+  });
+})();
+
+/* ====== Daily Alerts logic (Download targets the NEGATIVE table only) ====== */
+const INDEX_URL = 'reports/index.json';
+const reportSelect = document.getElementById('reportSelect');
+const meta = document.getElementById('meta');
+const empty = document.getElementById('empty');
+const frame = document.getElementById('report');
+const latestText = document.getElementById('latestText');
+const latestOpen = document.getElementById('latestOpen');
+const downloadBtn = document.getElementById('downloadXlsx');
+
+let REPORTS = [];
+let CURRENT_DATE = ''; // used for filename
+
+function setHTML(el, html) { el.innerHTML = html; }
+function esc(s) { return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+const norm = s => (s||'').replace(/\s+/g,' ').trim().toLowerCase();
+
+/* Find the "Negative Review Details (latest run)" table in the iframe document */
+function getNegativeDetailsTable(doc){
+  const target = 'negative review details (latest run)';
+
+  // 1) Look for a <table><caption>…</caption> that matches
+  for (const t of doc.querySelectorAll('table')) {
+    if (t.caption && norm(t.caption.textContent).includes(target)) return t;
+    // Also check common attributes authors sometimes use
+    const dt = norm(t.getAttribute('data-title') || '');
+    const al = norm(t.getAttribute('aria-label') || '');
+    if (dt.includes(target) || al.includes(target)) return t;
+  }
+
+  // 2) Find heading whose text matches, then take the first following table
+  const headings = doc.querySelectorAll('h1,h2,h3,h4,h5,h6,strong');
+  for (const h of headings) {
+    if (norm(h.textContent).includes(target)) {
+      // walk forward in DOM to find the next table
+      let n = h;
+      while (n && (n = n.nextElementSibling)) {
+        if (n.tagName && n.tagName.toLowerCase() === 'table') return n;
+        // sometimes headings are wrapped; descend into sections/panels
+        const innerTable = n.querySelector && n.querySelector('table');
+        if (innerTable) return innerTable;
+      }
+    }
+  }
+
+  // 3) Fallback: last resort look for id containing a hint
+  const idHint = doc.querySelector('table[id*="negative"], table[id*="neg"]');
+  if (idHint) return idHint;
+
+  return null;
 }
-.sidebar__brand{
-  font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
-  display:flex; align-items:center; justify-content:space-between;
+
+async function loadIndex() {
+  try {
+    const r = await fetch(INDEX_URL + '?nocache=' + Date.now());
+    if (!r.ok) throw new Error(`index not found`);
+    REPORTS = await r.json() || [];
+
+    if (!REPORTS.length) {
+      setHTML(latestText, '📅 No reports generated yet.');
+      latestOpen.disabled = true;
+      downloadBtn.disabled = true;
+      setHTML(empty, 'No reports published yet.');
+      return;
+    }
+
+    const latest = REPORTS[0];
+    CURRENT_DATE = latest.date;
+    setHTML(latestText, `📅 <strong>Latest report generated on ${latest.date}</strong>`);
+    latestOpen.href = latest.path;
+    latestOpen.disabled = false;
+    downloadBtn.disabled = true; // enable only after iframe confirms the table exists
+
+    // Populate dropdown
+    reportSelect.innerHTML = REPORTS.map((x, i) => `<option value="${i}">${x.date}</option>`).join('');
+    reportSelect.addEventListener('change', () => {
+      const i = parseInt(reportSelect.value, 10);
+      if (!isNaN(i)) showReport(i);
+    });
+
+    reportSelect.value = '0';
+    await showReport(0);
+  } catch (e) {
+    setHTML(latestText, `⚠️ <span class="error">Failed to load report index: ${esc(e.message)}</span>`);
+    setHTML(empty, `<span class="error">Failed to load report index.</span>`);
+    latestOpen.disabled = true;
+    downloadBtn.disabled = true;
+  }
 }
-.sidebar-toggle-inner {
-  border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; color:#333;
+
+async function showReport(i) {
+  const item = REPORTS[i];
+  if (!item) return;
+  empty.textContent = '';
+  CURRENT_DATE = item.date;
+  meta.textContent = `Showing report for ${item.date}`;
+  downloadBtn.disabled = true;           // disable until table check passes
+  frame.src = item.path + '?nocache=' + Date.now();
+
+  // When the iframe loads, verify the target table exists (same-origin only)
+  frame.onload = () => {
+    try {
+      const doc = frame.contentDocument || frame.contentWindow?.document;
+      const tbl = getNegativeDetailsTable(doc);
+      downloadBtn.disabled = !tbl;
+    } catch (err) {
+      // Likely cross-origin — cannot inspect; keep disabled and show hint on click
+      downloadBtn.disabled = false; // allow click to show helpful error
+    }
+  };
 }
-.sidebar-toggle-inner:hover { opacity:0.7; }
 
-.sidebar__nav{ display:flex; flex-direction:column; padding:8px; gap:4px; }
-.sidebar__nav a{ padding:10px 12px; border-radius:8px; text-decoration:none; color:#111827; }
-.sidebar__nav a:hover{ background:#f3f4f6; }
-.sidebar__nav a.active{ background:#1f75fe; color:#fff; }
+function downloadNegativeDetailsAsCSV() {
+  try {
+    const doc = frame.contentDocument || frame.contentWindow?.document;
+    if (!doc) throw new Error('Unable to access embedded report.');
+    const table = getNegativeDetailsTable(doc);
+    if (!table) {
+      alert('Could not find "Negative Review Details (latest run)" in the embedded report.');
+      return;
+    }
 
-.sidebar-overlay{ position: fixed; inset:0; background:rgba(0,0,0,.35); z-index:1040; }
+    const rows = Array.from(table.rows);
+    const csv = rows.map(tr => {
+      const cells = Array.from(tr.cells);
+      return cells.map(td => {
+        let v = td.innerText.replace(/\r?\n+/g, ' ').trim();
+        v = v.replace(/"/g, '""');
+        return /[",\n]/.test(v) ? `"${v}"` : v;
+      }).join(',');
+    }).join('\n');
 
-.page{ margin-left: var(--sidebar-w); transition: margin-left .22s ease; padding:16px; }
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateSafe = (CURRENT_DATE || 'report').replace(/[^0-9A-Za-z-_]/g, '_');
+    a.href = url;
+    a.download = `negative_review_details_${dateSafe}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error(err);
+    alert('Unable to export the table. If the report is hosted on a different domain, the browser blocks access. Serve the report on the same domain or provide a CSV/JSON endpoint for the Negative Review Details.');
+  }
+}
 
-/* Collapsed state */
-body.sidebar-collapsed .sidebar{ transform: translateX(-100%); }
-body.sidebar-collapsed .page{ margin-left: 0; }
-body.sidebar-collapsed .sidebar-overlay{ display:none; }
+downloadBtn.addEventListener('click', downloadNegativeDetailsAsCSV);
 
-/* Responsive */
-@media (max-width: 900px){
-  body:not(.sidebar-collapsed) .sidebar-overlay{
+loadIndex();
+</script>
