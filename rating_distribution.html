@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>📊 Rating Distribution</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h2 { text-align: center; }
+	.navbar { padding: 10px; border-bottom: 1px solid #ccc; text-align: center; }
+    .navbar a { margin: 0 10px; text-decoration: none; color: #007bff; }
+    .navbar a:hover { text-decoration: underline; }
+    #controls { margin: 15px 0; text-align: center; }
+    label { margin: 0 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <!-- Navbar -->
+  <div class="navbar">
+    <a href="index.html">🏠 Home</a>
+    <a href="home.html">🌍 Topic Clusters</a>
+    <a href="overview.html">✍ Topics Overview</a>
+    <a href="sentiment.html">🙂 Sentiments</a>
+    <a href="review_trend.html">📈 Review Trends</a>
+    <a href="rating_distribution.html">📊 Rating Distribution</a>
+    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+
+  </div>
+  <h2>📊 Rating Distribution Over Time</h2>
+
+  <div id="controls">
+    <label for="appVersionFilter">App Version:</label>
+    <select id="appVersionFilter" multiple></select>
+
+    <label for="startDate">Start Date:</label>
+    <input type="date" id="startDate">
+
+    <label for="endDate">End Date:</label>
+    <input type="date" id="endDate">
+
+    <button onclick="applyFilters()">Apply Filters</button>
+  </div>
+
+  <div id="distributionPlot"></div>
+
+  <script>
+    let globalData = [];
+
+    fetch("df_ytd.json")
+      .then(resp => resp.json())
+      .then(data => {
+        globalData = data.map(d => ({
+          review_date: new Date(d.review_date),
+          rating: +d.rating,
+          appVersion: d.appVersion || "Unknown"
+        }));
+
+        // Populate version dropdown
+        const versions = [...new Set(globalData.map(d => d.appVersion))].sort();
+        const select = document.getElementById("appVersionFilter");
+
+        // Add "All Versions" option
+        const allOpt = document.createElement("option");
+        allOpt.value = "ALL";
+        allOpt.textContent = "All Versions";
+        select.appendChild(allOpt);
+
+        versions.forEach(v => {
+          const opt = document.createElement("option");
+          opt.value = v;
+          opt.textContent = v;
+          select.appendChild(opt);
+        });
+
+        drawDistribution(globalData);
+      });
+
+    function applyFilters() {
+      const selectedVersions = Array.from(document.getElementById("appVersionFilter").selectedOptions).map(o => o.value);
+      const start = document.getElementById("startDate").value ? new Date(document.getElementById("startDate").value) : null;
+      const end = document.getElementById("endDate").value ? new Date(document.getElementById("endDate").value) : null;
+
+      let filtered = globalData;
+
+      if (selectedVersions.length > 0 && !selectedVersions.includes("ALL")) {
+        filtered = filtered.filter(d => selectedVersions.includes(d.appVersion));
+      }
+
+      if (start) {
+        filtered = filtered.filter(d => d.review_date >= start);
+      }
+
+      if (end) {
+        filtered = filtered.filter(d => d.review_date <= end);
+      }
+
+      drawDistribution(filtered);
+    }
+
+    function drawDistribution(data) {
+      const ratings = [...new Set(data.map(d => d.rating))].sort();
+
+      const traces = ratings.map(r => {
+        const subset = data.filter(d => d.rating === r);
+        return {
+          x: subset.map(d => d.review_date),
+          type: "histogram",
+          name: `Rating ${r}`,
+          nbinsx: 30,
+          opacity: 0.7,
+          hovertemplate:
+            "Rating: " + r +
+            "<br>Date: %{x|%Y-%m-%d}" +
+            "<br>Count: %{y}<extra></extra>"
+        };
+      });
+
+      const layout = {
+        barmode: "stack",
+        title: "Rating Distribution Over Time",
+        xaxis: { title: "Date" },
+        yaxis: { title: "Count of Reviews" },
+        hovermode: "x unified"
+      };
+
+      Plotly.newPlot("distributionPlot", traces, layout);
+    }
+  </script>
+</body>
+
+</html>
+
+
