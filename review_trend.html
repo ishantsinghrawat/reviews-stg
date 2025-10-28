@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>📈 Review Trends</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h2 { text-align: center; }
+    .navbar { padding: 10px; border-bottom: 1px solid #ccc; text-align: center; }
+    .navbar a { margin: 0 10px; text-decoration: none; color: #007bff; }
+    .navbar a:hover { text-decoration: underline; }
+    #controls { margin: 15px 0; text-align: center; }
+    label { margin: 0 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <div class="navbar">
+    <a href="index.html">🏠 Home</a>
+    <a href="home.html">🌍 Topic Clusters</a>
+    <a href="overview.html">✍ Topics Overview</a>
+    <a href="sentiment.html">🙂 Sentiments</a>
+    <a href="review_trend.html">📈 Review Trends</a>
+    <a href="rating_distribution.html">📊 Rating Distribution</a>
+    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+
+
+  </div>
+
+  <h2>📈 Review Trend Over Time</h2>
+  <div id="controls">
+    <label>Aggregation:</label>
+    <select id="aggPeriod" onchange="drawTrend()">
+      <option value="D">Daily</option>
+      <option value="W" selected>Weekly</option>
+      <option value="M">Monthly</option>
+    </select>
+    <label>App Version:</label>
+    <select id="versionFilter" multiple></select>
+    <label>Start Date:</label>
+    <input type="date" id="dateStart">
+    <label>End Date:</label>
+    <input type="date" id="dateEnd">
+    <button onclick="drawTrend()">Apply</button>
+  </div>
+  <div id="trendPlot"></div>
+
+  <script>
+    let data = [];
+
+    fetch("df_ytd.json")
+      .then(resp => resp.json())
+      .then(json => {
+        data = json.map(d => ({
+          review_date: new Date(d.review_date),
+          rating: +d.rating,
+          appVersion: d.appVersion || "Unknown"
+        }));
+
+        const versions = [...new Set(data.map(d => d.appVersion))].sort();
+        const sel = document.getElementById("versionFilter");
+        const allOpt = document.createElement("option");
+        allOpt.value = "__ALL__"; allOpt.textContent = "All Versions"; allOpt.selected = true;
+        sel.appendChild(allOpt);
+        versions.forEach(v => {
+          const opt = document.createElement("option");
+          opt.value = v; opt.textContent = v; sel.appendChild(opt);
+        });
+
+        drawTrend();
+      });
+
+    function drawTrend() {
+      const agg = document.getElementById("aggPeriod").value;
+      let selected = Array.from(document.getElementById("versionFilter").selectedOptions).map(o => o.value);
+      if (selected.includes("__ALL__")) selected = [];
+      const start = document.getElementById("dateStart").value ? new Date(document.getElementById("dateStart").value) : null;
+      const end = document.getElementById("dateEnd").value ? new Date(document.getElementById("dateEnd").value) : null;
+
+      let filtered = data;
+      if (selected.length) filtered = filtered.filter(d => selected.includes(d.appVersion));
+      if (start) filtered = filtered.filter(d => d.review_date >= start);
+      if (end) filtered = filtered.filter(d => d.review_date <= end);
+
+      let grouped = {};
+      filtered.forEach(d => {
+        let key;
+        if (agg === "D") key = d.review_date.toISOString().split("T")[0];
+        else if (agg === "W") {
+          const firstDay = new Date(d.review_date);
+          firstDay.setDate(firstDay.getDate() - firstDay.getDay());
+          key = firstDay.toISOString().split("T")[0];
+        } else key = d.review_date.getFullYear() + "-" + (d.review_date.getMonth()+1);
+
+        if (!grouped[key]) grouped[key] = {count:0, sum:0};
+        grouped[key].count++; grouped[key].sum += d.rating;
+      });
+
+      const trend = Object.entries(grouped).map(([k,v]) => ({ date: k, count: v.count, avg: v.sum/v.count }));
+      trend.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+      Plotly.newPlot("trendPlot", [
+        {x: trend.map(t=>t.date), y: trend.map(t=>t.count), type:"scatter", mode:"lines+markers", name:"Review Count"},
+        {x: trend.map(t=>t.date), y: trend.map(t=>t.avg), type:"scatter", mode:"lines+markers", name:"Avg Rating", yaxis:"y2"}
+      ], {
+        title:"Number of Reviews & Avg Rating Over Time",
+		xaxis:{title: "Time Period"}, 
+        yaxis:{title:"Reviews"},
+        yaxis2:{title:"Avg Rating", overlaying:"y", side:"right", range:[0,5]},
+        hovermode:"x unified"
+      });
+    }
+  </script>
+</body>
+
+</html>
+
+
+
