@@ -9,19 +9,19 @@
 :root { --sidebar-w: 260px; --sidebar-bg:#ffffff; --sidebar-border:#e5e7eb; }
 body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#fff; }
 
-/* ====== Sidebar + Toggle (inside header) ====== */
+/* ====== Sidebar + Toggle ====== */
 .sidebar{
-position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
-background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
-transform: translateX(0); transition: transform .22s ease;
-display:flex; flex-direction:column;
+  position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
+  background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
+  transform: translateX(0); transition: transform .22s ease;
+  display:flex; flex-direction:column;
 }
 .sidebar__brand{
-font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
-display:flex; align-items:center; justify-content:space-between;
+  font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
+  display:flex; align-items:center; justify-content:space-between;
 }
 .sidebar-toggle-inner {
-border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; color:#333;
+  border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; color:#333;
 }
 .sidebar-toggle-inner:hover { opacity:0.7; }
 
@@ -41,16 +41,16 @@ body.sidebar-collapsed .sidebar-overlay{ display:none; }
 
 /* Responsive */
 @media (max-width: 900px){
-body:not(.sidebar-collapsed) .sidebar-overlay{ display:block; }
-.page{ margin-left: 0; }
+  body:not(.sidebar-collapsed) .sidebar-overlay{ display:block; }
+  .page{ margin-left: 0; }
 }
 
-/* ====== Floating reopen button (only when collapsed) ====== */
+/* ====== Floating reopen button ====== */
 .sidebar-reopen {
-position: fixed; top: 16px; left: 16px; z-index: 1100;
-border: 1px solid #e5e7eb; background: #fff; border-radius: 10px;
-padding: 8px 10px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.06);
-display: none; /* hidden by default */
+  position: fixed; top: 16px; left: 16px; z-index: 1100;
+  border: 1px solid #e5e7eb; background: #fff; border-radius: 10px;
+  padding: 8px 10px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  display: none;
 }
 .sidebar-reopen:hover { background:#f8fafc; }
 body.sidebar-collapsed .sidebar-reopen { display: block; }
@@ -72,86 +72,85 @@ select { min-width: 240px; padding: 6px; }
 </style>
 </head>
 <body>
-<!-- Overlay (click to close on small screens) -->
+<!-- Overlay -->
 <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
 
-<!-- Left sliding sidebar -->
+<!-- Sidebar -->
 <aside id="sidebar" class="sidebar" aria-label="Site navigation">
-<div class="sidebar__brand">
-📱 Reviews Dashboard
-<button id="sidebarToggle" class="sidebar-toggle-inner" aria-controls="sidebar" title="Toggle menu">☰</button>
-</div>
-<nav class="sidebar__nav">
-<a href="index.html">🏠 Home</a>
-<a href="home.html">🌍 Topic Clusters</a>
-<a href="overview.html">✍ Topics Overview</a>
-<a href="sentiment.html">🙂 Sentiments</a>
-<a href="review_trend.html">📈 Review Trends</a>
-<a href="rating_distribution.html">📊 Rating Distribution</a>
-<a href="avg_rating.html">⭐ Avg Rating by Version</a>
-<a class="active" href="alerts.html">🚨 Daily Alerts</a>
-</nav>
+  <div class="sidebar__brand">
+    📱 Reviews Dashboard
+    <button id="sidebarToggle" class="sidebar-toggle-inner" aria-controls="sidebar" title="Toggle menu">☰</button>
+  </div>
+  <nav class="sidebar__nav">
+    <a href="index.html">🏠 Home</a>
+    <a href="home.html">🌍 Topic Clusters</a>
+    <a href="overview.html">✍ Topics Overview</a>
+    <a href="sentiment.html">🙂 Sentiments</a>
+    <a href="review_trend.html">📈 Review Trends</a>
+    <a href="rating_distribution.html">📊 Rating Distribution</a>
+    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+    <a class="active" href="alerts.html">🚨 Daily Alerts</a>
+  </nav>
 </aside>
 
-<!-- Floating toggle visible only when sidebar is hidden -->
+<!-- Floating reopen button -->
 <button id="sidebarReopen" class="sidebar-reopen" title="Show menu">☰</button>
 
-<!-- Page content -->
+<!-- Page Content -->
 <div class="page">
-<h1>🚨 Daily Alert Reports</h1>
+  <h1>🚨 Daily Alert Reports</h1>
 
-<div id="latestBanner" class="banner">
-<span id="latestText">📅 Loading latest report info…</span>
-<div class="actions">
-<a id="latestOpen" class="btn" href="#" target="_blank" rel="noopener" disabled>Open latest</a>
-<button id="latestJump" class="btn secondary" disabled>Jump to embedded</button>
-<button id="latestCopy" class="btn secondary" disabled>Copy link</button>
-</div>
-</div>
+  <div id="latestBanner" class="banner">
+    <span id="latestText">📅 Loading latest report info…</span>
+    <div class="actions">
+      <a id="latestOpen" class="btn" href="#" target="_blank" rel="noopener" disabled>Open latest</a>
+      <button id="downloadXlsx" class="btn secondary" disabled>Download Excel</button>
+    </div>
+  </div>
 
-<div class="toolbar panel">
-<div>
-<label for="reportSelect"><strong>Select report</strong></label>
-<select id="reportSelect"></select>
-</div>
-<div class="meta" id="meta"></div>
-</div>
+  <div class="toolbar panel">
+    <div>
+      <label for="reportSelect"><strong>Select report</strong></label>
+      <select id="reportSelect"></select>
+    </div>
+    <div class="meta" id="meta"></div>
+  </div>
 
-<div id="empty" class="muted"></div>
-<iframe id="report" class="frame"></iframe>
+  <div id="empty" class="muted"></div>
+  <iframe id="report" class="frame"></iframe>
 </div>
 
 <script>
 /* ====== Sidebar behavior ====== */
 (function(){
-const body = document.body;
-const toggleBtn = document.getElementById('sidebarToggle');
-const overlay = document.getElementById('sidebarOverlay');
-const reopenBtn = document.getElementById('sidebarReopen');
-const STORAGE_KEY = 'sidebarCollapsed';
+  const body = document.body;
+  const toggleBtn = document.getElementById('sidebarToggle');
+  const overlay = document.getElementById('sidebarOverlay');
+  const reopenBtn = document.getElementById('sidebarReopen');
+  const STORAGE_KEY = 'sidebarCollapsed';
 
-const saved = localStorage.getItem(STORAGE_KEY);
-const preferCollapsed = saved === 'true' || (saved === null && window.matchMedia('(max-width: 900px)').matches);
-setCollapsed(preferCollapsed);
+  const saved = localStorage.getItem(STORAGE_KEY);
+  const preferCollapsed = saved === 'true' || (saved === null && window.matchMedia('(max-width: 900px)').matches);
+  setCollapsed(preferCollapsed);
 
-function setCollapsed(collapsed){
-body.classList.toggle('sidebar-collapsed', collapsed);
-toggleBtn.setAttribute('aria-expanded', String(!collapsed));
-overlay.hidden = collapsed || !window.matchMedia('(max-width: 900px)').matches;
-localStorage.setItem(STORAGE_KEY, String(collapsed));
-}
+  function setCollapsed(collapsed){
+    body.classList.toggle('sidebar-collapsed', collapsed);
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    overlay.hidden = collapsed || !window.matchMedia('(max-width: 900px)').matches;
+    localStorage.setItem(STORAGE_KEY, String(collapsed));
+  }
 
-toggleBtn.addEventListener('click', () => setCollapsed(!body.classList.contains('sidebar-collapsed')));
-overlay.addEventListener('click', () => setCollapsed(true));
-reopenBtn.addEventListener('click', () => setCollapsed(false));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !body.classList.contains('sidebar-collapsed')) setCollapsed(true); });
-window.addEventListener('resize', () => {
-const small = window.matchMedia('(max-width: 900px)').matches;
-overlay.hidden = body.classList.contains('sidebar-collapsed') || !small;
-});
+  toggleBtn.addEventListener('click', () => setCollapsed(!body.classList.contains('sidebar-collapsed')));
+  overlay.addEventListener('click', () => setCollapsed(true));
+  reopenBtn.addEventListener('click', () => setCollapsed(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !body.classList.contains('sidebar-collapsed')) setCollapsed(true); });
+  window.addEventListener('resize', () => {
+    const small = window.matchMedia('(max-width: 900px)').matches;
+    overlay.hidden = body.classList.contains('sidebar-collapsed') || !small;
+  });
 })();
 
-/* ====== Daily Alerts logic (reports are pre-filtered) ====== */
+/* ====== Daily Alerts logic (Download NEGATIVE Review Details) ====== */
 const INDEX_URL = 'reports/index.json';
 const reportSelect = document.getElementById('reportSelect');
 const meta = document.getElementById('meta');
@@ -159,76 +158,132 @@ const empty = document.getElementById('empty');
 const frame = document.getElementById('report');
 const latestText = document.getElementById('latestText');
 const latestOpen = document.getElementById('latestOpen');
-const latestJump = document.getElementById('latestJump');
-const latestCopy = document.getElementById('latestCopy');
+const downloadBtn = document.getElementById('downloadXlsx');
 
 let REPORTS = [];
+let CURRENT_DATE = '';
 
 function setHTML(el, html) { el.innerHTML = html; }
 function esc(s) { return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+const norm = s => (s||'').replace(/\s+/g,' ').trim().toLowerCase();
+
+function getNegativeDetailsTable(doc){
+  const target = 'negative review details (latest run)';
+  for (const t of doc.querySelectorAll('table')) {
+    if (t.caption && norm(t.caption.textContent).includes(target)) return t;
+    const dt = norm(t.getAttribute('data-title') || '');
+    const al = norm(t.getAttribute('aria-label') || '');
+    if (dt.includes(target) || al.includes(target)) return t;
+  }
+  const headings = doc.querySelectorAll('h1,h2,h3,h4,h5,h6,strong');
+  for (const h of headings) {
+    if (norm(h.textContent).includes(target)) {
+      let n = h;
+      while (n && (n = n.nextElementSibling)) {
+        if (n.tagName?.toLowerCase() === 'table') return n;
+        const innerTable = n.querySelector && n.querySelector('table');
+        if (innerTable) return innerTable;
+      }
+    }
+  }
+  const idHint = doc.querySelector('table[id*="negative"], table[id*="neg"]');
+  if (idHint) return idHint;
+  return null;
+}
 
 async function loadIndex() {
-try {
-const r = await fetch(INDEX_URL + '?nocache=' + Date.now());
-if (!r.ok) throw new Error(`index not found`);
-REPORTS = await r.json() || [];
+  try {
+    const r = await fetch(INDEX_URL + '?nocache=' + Date.now());
+    if (!r.ok) throw new Error(`index not found`);
+    REPORTS = await r.json() || [];
 
-if (!REPORTS.length) {
-setHTML(latestText, '📅 No reports generated yet.');
-latestOpen.setAttribute('aria-disabled', 'true');
-latestJump.disabled = latestCopy.disabled = true;
-setHTML(empty, 'No reports published yet.');
-return;
-}
+    if (!REPORTS.length) {
+      setHTML(latestText, '📅 No reports generated yet.');
+      latestOpen.disabled = true;
+      downloadBtn.disabled = true;
+      setHTML(empty, 'No reports published yet.');
+      return;
+    }
 
-const latest = REPORTS[0];
-setHTML(latestText, `📅 <strong>Latest report generated on ${latest.date}</strong>`);
-latestOpen.href = latest.path;
-latestOpen.removeAttribute('aria-disabled');
-latestJump.disabled = latestCopy.disabled = false;
+    const latest = REPORTS[0];
+    CURRENT_DATE = latest.date;
+    setHTML(latestText, `📅 <strong>Latest report generated on ${latest.date}</strong>`);
+    latestOpen.href = latest.path;
+    latestOpen.disabled = false;
+    downloadBtn.disabled = true;
 
-latestJump.onclick = (e) => {
-e.preventDefault();
-reportSelect.value = '0';
-showReport(0).then(() => {
-frame.scrollIntoView({ behavior: 'smooth' });
-});
-};
-latestCopy.onclick = async (e) => {
-e.preventDefault();
-const abs = new URL(latest.path, window.location.href).href;
-try { await navigator.clipboard.writeText(abs); latestCopy.textContent = 'Copied!'; }
-catch { latestCopy.textContent = 'Copy failed'; }
-setTimeout(() => latestCopy.textContent = 'Copy link', 1200);
-};
+    reportSelect.innerHTML = REPORTS.map((x, i) => `<option value="${i}">${x.date}</option>`).join('');
+    reportSelect.addEventListener('change', () => {
+      const i = parseInt(reportSelect.value, 10);
+      if (!isNaN(i)) showReport(i);
+    });
 
-reportSelect.innerHTML = REPORTS.map((x, i) =>
-`<option value="${i}">${x.date}</option>`
-).join('');
-reportSelect.addEventListener('change', () => {
-const i = parseInt(reportSelect.value, 10);
-if (!isNaN(i)) showReport(i);
-});
-reportSelect.value = '0';
-await showReport(0);
-} catch (e) {
-setHTML(latestText, `⚠️ <span class="error">Failed to load report index: ${esc(e.message)}</span>`);
-setHTML(empty, `<span class="error">Failed to load report index.</span>`);
-latestOpen.setAttribute('aria-disabled', 'true');
-latestJump.disabled = latestCopy.disabled = true;
-}
+    reportSelect.value = '0';
+    await showReport(0);
+  } catch (e) {
+    setHTML(latestText, `⚠️ <span class="error">Failed to load report index: ${esc(e.message)}</span>`);
+    setHTML(empty, `<span class="error">Failed to load report index.</span>`);
+    latestOpen.disabled = true;
+    downloadBtn.disabled = true;
+  }
 }
 
 async function showReport(i) {
-const item = REPORTS[i];
-if (!item) return;
-empty.textContent = '';
-meta.textContent = `Showing report for ${item.date}`;
+  const item = REPORTS[i];
+  if (!item) return;
+  empty.textContent = '';
+  CURRENT_DATE = item.date;
+  meta.textContent = `Showing report for ${item.date}`;
+  downloadBtn.disabled = true;
+  frame.src = item.path + '?nocache=' + Date.now();
 
-// Reports are already correct by construction (pre-filtered)
-frame.src = item.path + '?nocache=' + Date.now();
+  frame.onload = () => {
+    try {
+      const doc = frame.contentDocument || frame.contentWindow?.document;
+      const tbl = getNegativeDetailsTable(doc);
+      downloadBtn.disabled = !tbl;
+    } catch {
+      downloadBtn.disabled = false;
+    }
+  };
 }
 
+function downloadNegativeDetailsAsCSV() {
+  try {
+    const doc = frame.contentDocument || frame.contentWindow?.document;
+    if (!doc) throw new Error('Unable to access embedded report.');
+    const table = getNegativeDetailsTable(doc);
+    if (!table) {
+      alert('Could not find "Negative Review Details (latest run)" in the report.');
+      return;
+    }
+
+    const rows = Array.from(table.rows);
+    const csv = rows.map(tr =>
+      Array.from(tr.cells).map(td => {
+        let v = td.innerText.replace(/\r?\n+/g, ' ').trim();
+        v = v.replace(/"/g, '""');
+        return /[",\n]/.test(v) ? `"${v}"` : v;
+      }).join(',')
+    ).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateSafe = (CURRENT_DATE || 'report').replace(/[^0-9A-Za-z-_]/g, '_');
+    a.href = url;
+    a.download = `negative_review_details_${dateSafe}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error(err);
+    alert('Unable to export. If report is hosted on another domain, browser blocks access. Host the report on same domain or expose CSV endpoint.');
+  }
+}
+
+downloadBtn.addEventListener('click', downloadNegativeDetailsAsCSV);
 loadIndex();
 </script>
 </body>
