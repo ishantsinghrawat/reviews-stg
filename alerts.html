@@ -1,5 +1,127 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Daily Alerts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+/* ====== Base ====== */
+:root { --sidebar-w: 260px; --sidebar-bg:#ffffff; --sidebar-border:#e5e7eb; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#fff; }
+
+/* ====== Sidebar + Toggle ====== */
+.sidebar{
+  position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); z-index: 1050;
+  background: var(--sidebar-bg); border-right:1px solid var(--sidebar-border);
+  transform: translateX(0); transition: transform .22s ease;
+  display:flex; flex-direction:column;
+}
+.sidebar__brand{
+  font-weight:700; padding:14px 16px; border-bottom:1px solid var(--sidebar-border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.sidebar-toggle-inner {
+  border:none; background:transparent; font-size:20px; cursor:pointer; line-height:1; color:#333;
+}
+.sidebar-toggle-inner:hover { opacity:0.7; }
+
+.sidebar__nav{ display:flex; flex-direction:column; padding:8px; gap:4px; }
+.sidebar__nav a{ padding:10px 12px; border-radius:8px; text-decoration:none; color:#111827; }
+.sidebar__nav a:hover{ background:#f3f4f6; }
+.sidebar__nav a.active{ background:#1f75fe; color:#fff; }
+
+.sidebar-overlay{ position: fixed; inset:0; background:rgba(0,0,0,.35); z-index:1040; }
+
+.page{ margin-left: var(--sidebar-w); transition: margin-left .22s ease; padding:16px; }
+
+/* Collapsed state */
+body.sidebar-collapsed .sidebar{ transform: translateX(-100%); }
+body.sidebar-collapsed .page{ margin-left: 0; }
+body.sidebar-collapsed .sidebar-overlay{ display:none; }
+
+/* Responsive */
+@media (max-width: 900px){
+  body:not(.sidebar-collapsed) .sidebar-overlay{ display:block; }
+  .page{ margin-left: 0; }
+}
+
+/* ====== Floating reopen button ====== */
+.sidebar-reopen {
+  position: fixed; top: 16px; left: 16px; z-index: 1100;
+  border: 1px solid #e5e7eb; background: #fff; border-radius: 10px;
+  padding: 8px 10px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  display: none;
+}
+.sidebar-reopen:hover { background:#f8fafc; }
+body.sidebar-collapsed .sidebar-reopen { display: block; }
+
+/* ====== Page UI ====== */
+.toolbar { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin: 10px 0 16px; }
+select { min-width: 240px; padding: 6px; }
+.meta { color:#555; margin: 6px 0 14px; }
+.panel { padding: 12px 14px; background: #f6f7f9; border-radius: 10px; }
+#report { margin-top: 14px; }
+.muted { color:#777; }
+.error { color:#b00020; }
+.banner { background:#e8f0fe; border:1px solid #c6dafc; border-radius:8px; padding:10px 14px; margin:10px 0 20px; color:#1a73e8; font-weight:500; display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap; }
+.actions { display:flex; gap:8px; flex-wrap: wrap; }
+.btn { appearance:none; border:1px solid #c6dafc; background:#1a73e8; color:white; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600; text-decoration:none; }
+.btn.secondary { background:#f6f7f9; color:#1a73e8; border-color:#c6dafc; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.frame { border:1px solid #eee; border-radius:10px; width:100%; min-height:60vh; }
+</style>
+</head>
+<body>
+<!-- Overlay -->
+<div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
+
+<!-- Sidebar -->
+<aside id="sidebar" class="sidebar" aria-label="Site navigation">
+  <div class="sidebar__brand">
+    📱 Reviews Dashboard
+    <button id="sidebarToggle" class="sidebar-toggle-inner" aria-controls="sidebar" title="Toggle menu">☰</button>
+  </div>
+  <nav class="sidebar__nav">
+    <a href="index.html">🏠 Home</a>
+    <a href="home.html">🌍 Topic Clusters</a>
+    <a href="overview.html">✍ Topics Overview</a>
+    <a href="sentiment.html">🙂 Sentiments</a>
+    <a href="review_trend.html">📈 Review Trends</a>
+    <a href="rating_distribution.html">📊 Rating Distribution</a>
+    <a href="avg_rating.html">⭐ Avg Rating by Version</a>
+    <a class="active" href="alerts.html">🚨 Daily Alerts</a>
+  </nav>
+</aside>
+
+<!-- Floating reopen button -->
+<button id="sidebarReopen" class="sidebar-reopen" title="Show menu">☰</button>
+
+<!-- Page Content -->
+<div class="page">
+  <h1>🚨 Daily Alert Reports</h1>
+
+  <div id="latestBanner" class="banner">
+    <span id="latestText">📅 Loading latest report info…</span>
+    <div class="actions">
+      <a id="latestOpen" class="btn" href="#" target="_blank" rel="noopener" disabled>Open latest</a>
+      <button id="downloadXlsx" class="btn secondary" disabled>Download Excel</button>
+    </div>
+  </div>
+
+  <div class="toolbar panel">
+    <div>
+      <label for="reportSelect"><strong>Select report</strong></label>
+      <select id="reportSelect"></select>
+    </div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <div id="empty" class="muted"></div>
+  <iframe id="report" class="frame"></iframe>
+</div>
+
 <script>
-/* ====== Sidebar behavior (unchanged) ====== */
+/* ====== Sidebar behavior ====== */
 (function(){
   const body = document.body;
   const toggleBtn = document.getElementById('sidebarToggle');
@@ -28,7 +150,7 @@
   });
 })();
 
-/* ====== Daily Alerts logic (Download targets the NEGATIVE table only) ====== */
+/* ====== Daily Alerts logic (Download NEGATIVE Review Details) ====== */
 const INDEX_URL = 'reports/index.json';
 const reportSelect = document.getElementById('reportSelect');
 const meta = document.getElementById('meta');
@@ -39,44 +161,33 @@ const latestOpen = document.getElementById('latestOpen');
 const downloadBtn = document.getElementById('downloadXlsx');
 
 let REPORTS = [];
-let CURRENT_DATE = ''; // used for filename
+let CURRENT_DATE = '';
 
 function setHTML(el, html) { el.innerHTML = html; }
 function esc(s) { return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 const norm = s => (s||'').replace(/\s+/g,' ').trim().toLowerCase();
 
-/* Find the "Negative Review Details (latest run)" table in the iframe document */
 function getNegativeDetailsTable(doc){
   const target = 'negative review details (latest run)';
-
-  // 1) Look for a <table><caption>…</caption> that matches
   for (const t of doc.querySelectorAll('table')) {
     if (t.caption && norm(t.caption.textContent).includes(target)) return t;
-    // Also check common attributes authors sometimes use
     const dt = norm(t.getAttribute('data-title') || '');
     const al = norm(t.getAttribute('aria-label') || '');
     if (dt.includes(target) || al.includes(target)) return t;
   }
-
-  // 2) Find heading whose text matches, then take the first following table
   const headings = doc.querySelectorAll('h1,h2,h3,h4,h5,h6,strong');
   for (const h of headings) {
     if (norm(h.textContent).includes(target)) {
-      // walk forward in DOM to find the next table
       let n = h;
       while (n && (n = n.nextElementSibling)) {
-        if (n.tagName && n.tagName.toLowerCase() === 'table') return n;
-        // sometimes headings are wrapped; descend into sections/panels
+        if (n.tagName?.toLowerCase() === 'table') return n;
         const innerTable = n.querySelector && n.querySelector('table');
         if (innerTable) return innerTable;
       }
     }
   }
-
-  // 3) Fallback: last resort look for id containing a hint
   const idHint = doc.querySelector('table[id*="negative"], table[id*="neg"]');
   if (idHint) return idHint;
-
   return null;
 }
 
@@ -99,9 +210,8 @@ async function loadIndex() {
     setHTML(latestText, `📅 <strong>Latest report generated on ${latest.date}</strong>`);
     latestOpen.href = latest.path;
     latestOpen.disabled = false;
-    downloadBtn.disabled = true; // enable only after iframe confirms the table exists
+    downloadBtn.disabled = true;
 
-    // Populate dropdown
     reportSelect.innerHTML = REPORTS.map((x, i) => `<option value="${i}">${x.date}</option>`).join('');
     reportSelect.addEventListener('change', () => {
       const i = parseInt(reportSelect.value, 10);
@@ -124,18 +234,16 @@ async function showReport(i) {
   empty.textContent = '';
   CURRENT_DATE = item.date;
   meta.textContent = `Showing report for ${item.date}`;
-  downloadBtn.disabled = true;           // disable until table check passes
+  downloadBtn.disabled = true;
   frame.src = item.path + '?nocache=' + Date.now();
 
-  // When the iframe loads, verify the target table exists (same-origin only)
   frame.onload = () => {
     try {
       const doc = frame.contentDocument || frame.contentWindow?.document;
       const tbl = getNegativeDetailsTable(doc);
       downloadBtn.disabled = !tbl;
-    } catch (err) {
-      // Likely cross-origin — cannot inspect; keep disabled and show hint on click
-      downloadBtn.disabled = false; // allow click to show helpful error
+    } catch {
+      downloadBtn.disabled = false;
     }
   };
 }
@@ -146,19 +254,18 @@ function downloadNegativeDetailsAsCSV() {
     if (!doc) throw new Error('Unable to access embedded report.');
     const table = getNegativeDetailsTable(doc);
     if (!table) {
-      alert('Could not find "Negative Review Details (latest run)" in the embedded report.');
+      alert('Could not find "Negative Review Details (latest run)" in the report.');
       return;
     }
 
     const rows = Array.from(table.rows);
-    const csv = rows.map(tr => {
-      const cells = Array.from(tr.cells);
-      return cells.map(td => {
+    const csv = rows.map(tr =>
+      Array.from(tr.cells).map(td => {
         let v = td.innerText.replace(/\r?\n+/g, ' ').trim();
         v = v.replace(/"/g, '""');
         return /[",\n]/.test(v) ? `"${v}"` : v;
-      }).join(',');
-    }).join('\n');
+      }).join(',')
+    ).join('\n');
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -172,11 +279,12 @@ function downloadNegativeDetailsAsCSV() {
     URL.revokeObjectURL(url);
   } catch (err) {
     console.error(err);
-    alert('Unable to export the table. If the report is hosted on a different domain, the browser blocks access. Serve the report on the same domain or provide a CSV/JSON endpoint for the Negative Review Details.');
+    alert('Unable to export. If report is hosted on another domain, browser blocks access. Host the report on same domain or expose CSV endpoint.');
   }
 }
 
 downloadBtn.addEventListener('click', downloadNegativeDetailsAsCSV);
-
 loadIndex();
 </script>
+</body>
+</html>
