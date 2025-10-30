@@ -1,0 +1,115 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Daily Alert Report</title>
+
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:0; }
+.main { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+table { border-collapse: collapse; width:100%; font-size: 14px; }
+th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #fafafa; }
+code, pre { background:#f6f7f9; border-radius:6px; padding:2px 4px; }
+h1,h2,h3 { margin-top: 1.2em; }
+</style>
+
+</head><body>
+<div class="main">
+<h1>Negative Sentiment Delta Report</h1>
+<ul>
+<li>Updated file content: <strong>yes</strong></li>
+<li>Alert conditions: abs ≥ 1 or rel ≥ 10%</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th style="text-align: right;">Neg (old)</th>
+<th style="text-align: right;">Neg (new)</th>
+<th style="text-align: right;">Δ</th>
+<th style="text-align: right;">Δ%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Authentication/Login</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">+1</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+<tr>
+<td>Crashes/Bugs</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">+1</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">+2</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+</tbody>
+</table>
+<h3>Authentication/Login — new negative samples</h3>
+<ul>
+<li>It was good before I updated the app Oct 2025. now I can't log back in. The email login is broken because it won't send the link to my email address. waited 10 min and still nothing. not in junk folde…</li>
+</ul>
+<h3>Crashes/Bugs — new negative samples</h3>
+<ul>
+<li>this sucks I am still not able to scan my monopoly pieces to my md app</li>
+</ul>
+<h3>UI/UX — new negative samples</h3>
+<ul>
+<li>How do I enter the monopoly cards?!! No place in the app to do so! How do you roll such a promotion with terrible testing. Lawsuit in the making!</li>
+<li>Poor app UI design makes it IMPOSSIBLE to access Monopoly after placing a mobile order, for hours. I have to sign out, clear cache, sign back in, and that's stupid. stop "fixing" what ain't broke. Las…</li>
+</ul>
+<hr />
+<h3>Negative Review Details (latest run)</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Review</th>
+<th>App Version</th>
+<th>Date</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Crashes/Bugs</td>
+<td>this sucks I am still not able to scan my monopoly pieces to my md app</td>
+<td>25.84.0</td>
+<td>2025-10-29</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>Authentication/Login</td>
+<td>It was good before I updated the app Oct 2025. now I can't log back in. The email login is broken because it won't send the link to my email address. waited 10 min and still nothing. not in junk folde…</td>
+<td>25.84.0</td>
+<td>2025-10-29</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td>How do I enter the monopoly cards?!! No place in the app to do so! How do you roll such a promotion with terrible testing. Lawsuit in the making!</td>
+<td>25.84.0</td>
+<td>2025-10-29</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td>Poor app UI design makes it IMPOSSIBLE to access Monopoly after placing a mobile order, for hours. I have to sign out, clear cache, sign back in, and that's stupid. stop "fixing" what ain't broke. Las…</td>
+<td>25.84.0</td>
+<td>2025-10-29</td>
+<td>Google Play</td>
+</tr>
+</tbody>
+</table>
+</div>
+</body></html>
