@@ -1,0 +1,149 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Daily Alert Report</title>
+
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:0; }
+.main { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+table { border-collapse: collapse; width:100%; font-size: 14px; }
+th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #fafafa; }
+code, pre { background:#f6f7f9; border-radius:6px; padding:2px 4px; }
+h1,h2,h3 { margin-top: 1.2em; }
+</style>
+
+</head><body>
+<div class="main">
+<h1>Negative Sentiment Delta Report</h1>
+<ul>
+<li>Updated file content: <strong>yes</strong></li>
+<li>Alert conditions: abs ≥ 1 or rel ≥ 10%</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th style="text-align: right;">Neg (old)</th>
+<th style="text-align: right;">Neg (new)</th>
+<th style="text-align: right;">Δ</th>
+<th style="text-align: right;">Δ%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Authentication/Login</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">+1</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+<tr>
+<td>Crashes/Bugs</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">+2</td>
+<td style="text-align: right;">200.0%</td>
+</tr>
+<tr>
+<td>Customer Support</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">+1</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">+1</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+</tbody>
+</table>
+<h3>Authentication/Login — new negative samples</h3>
+<ul>
+<li>can't log in to access my points. when I enter my email I'm supposed to get a link sent to me but the link never arrives...</li>
+</ul>
+<h3>Crashes/Bugs — new negative samples</h3>
+<ul>
+<li>horrible app. barely works half the time</li>
+<li>Updated Nov 2025: App was unusable, was fixed but is now very buggy. McDonald's, stop breaking your own app!</li>
+<li>Absolutely terrible app. Never works when you need it.</li>
+</ul>
+<h3>Customer Support — new negative samples</h3>
+<ul>
+<li>Can't even type in the search part for the help part of the app. The app is worse than the customer support. It's like they hire the cheapest person for the IT part to sabotage their business and then…</li>
+</ul>
+<h3>UI/UX — new negative samples</h3>
+<ul>
+<li>monopoly promotion was horribly implemented. banner disappeared after mobile order was placed. have many unused codes because I cannot get the banner to appear....</li>
+<li>the Monopoly play now button doesn't even work!!!! so I can't enter my pieces!!!!</li>
+</ul>
+<hr />
+<h3>Negative Review Details (latest run)</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Review</th>
+<th>App Version</th>
+<th>Date</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Customer Support</td>
+<td>Can't even type in the search part for the help part of the app. The app is worse than the customer support. It's like they hire the cheapest person for the IT part to sabotage their business and then…</td>
+<td>25.84.0</td>
+<td>2025-11-05</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td>monopoly promotion was horribly implemented. banner disappeared after mobile order was placed. have many unused codes because I cannot get the banner to appear....</td>
+<td>25.84.0</td>
+<td>2025-11-05</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>Crashes/Bugs</td>
+<td>horrible app. barely works half the time</td>
+<td>Unknown</td>
+<td>2025-11-05</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>Crashes/Bugs</td>
+<td>Updated Nov 2025: App was unusable, was fixed but is now very buggy. McDonald's, stop breaking your own app!</td>
+<td>25.84.0</td>
+<td>2025-11-05</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>Crashes/Bugs</td>
+<td>Absolutely terrible app. Never works when you need it.</td>
+<td>25.84.0</td>
+<td>2025-11-05</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>Authentication/Login</td>
+<td>can't log in to access my points. when I enter my email I'm supposed to get a link sent to me but the link never arrives...</td>
+<td>25.84.0</td>
+<td>2025-11-05</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td>the Monopoly play now button doesn't even work!!!! so I can't enter my pieces!!!!</td>
+<td>25.84.0</td>
+<td>2025-11-05</td>
+<td>Google Play</td>
+</tr>
+</tbody>
+</table>
+</div>
+</body></html>
