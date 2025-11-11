@@ -40,7 +40,7 @@ def examples(rows, category, max_n=5):
         if str(r.get("category","")).strip()==category and canon_sent(r.get("sentiment_std") or r.get("sentiment"))=="Negative":
             txt = (r.get("review") or "").strip().replace("\n"," ")
             if txt:
-                out.append(f"- {txt[:200]}{'…' if len(txt)>200 else ''}")
+                out.append(f"- {txt[:500]}{'…' if len(txt)>500 else ''}")
                 n += 1
                 if n >= max_n: break
     return "\n".join(out) or "_no sample_"
