@@ -125,10 +125,7 @@ jobs:
           python scripts/compare_negatives.py \
             --current data_1d.json \
             --new new_data_1d.json \
-            --report delta_report.md \
-            --threshold-abs 1 \
-            --threshold-rel 0.1
-
+            --report delta_report.md 
       - name: Debug compare outputs
         run: |
           echo "compare.alert   = '${{ steps.compare.outputs.alert }}'"
