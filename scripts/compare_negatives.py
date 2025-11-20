@@ -47,8 +47,8 @@ def append_details_table(path, rows, max_rows=300):
     neg = []
     for r in rows:
         review = (r.get("review") or "").replace("\r", " ").replace("\n", " ").strip()
-        if len(review) > 200:
-            review = review[:200] + "…"
+        if len(review) > 800:
+            review = review[:800] + "…"
         neg.append({
             "Category": str(r.get("category", "")).strip() or "Uncategorized",
             "Review": review,
