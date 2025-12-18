@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Daily Alert Report</title>
+
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:0; }
+.main { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+table { border-collapse: collapse; width:100%; font-size: 14px; }
+th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #fafafa; }
+code, pre { background:#f6f7f9; border-radius:6px; padding:2px 4px; }
+h1,h2,h3 { margin-top: 1.2em; }
+</style>
+
+</head><body>
+<div class="main">
+<h1>Negative Sentiment Delta Report</h1>
+<ul>
+<li>Updated file content: <strong>yes</strong></li>
+<li>Alert conditions: abs ≥ 1 or rel ≥ 10%</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th style="text-align: right;">Neg (old)</th>
+<th style="text-align: right;">Neg (new)</th>
+<th style="text-align: right;">Δ</th>
+<th style="text-align: right;">Δ%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Authentication/Login</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">+1</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+</tbody>
+</table>
+<h3>Authentication/Login — new negative samples</h3>
+<ul>
+<li>I can't access my account,,somehow one day as I tried to use it, it asked me to log in and it didn't work,,I have alot of points but can't access them</li>
+</ul>
+<hr />
+<h3>Negative Review Details (latest run)</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Review</th>
+<th>App Version</th>
+<th>Date</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Authentication/Login</td>
+<td>I can't access my account,,somehow one day as I tried to use it, it asked me to log in and it didn't work,,I have alot of points but can't access them</td>
+<td>25.111.0</td>
+<td>2025-12-17</td>
+<td>Google Play</td>
+</tr>
+</tbody>
+</table>
+</div>
+</body></html>
