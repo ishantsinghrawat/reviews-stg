@@ -4,7 +4,7 @@
 import argparse
 import json
 import os
-from collections import Counter
+from collections import defaultdict
 
 SENTI_MAP = {
     "negative": "Negative", "NEGATIVE": "Negative", "LABEL_0": "Negative",
@@ -21,22 +21,20 @@ def canon_sent(s):
     return SENTI_MAP.get(str(s), s or "")
 
 
-def is_negative(r):
-    """Negative = sentiment == Negative. (Sentiment is computed in build_reviews_json.py)"""
-    return canon_sent(r.get("sentiment_std") or r.get("sentiment")) == "Negative"
+# NOTE: We intentionally DO NOT use latest_review_date() anymore.
+# App Store RSS often lags; restricting to only max(review_date) can hide iOS negatives.
 
-
-def normalize_source(s):
-    """Normalize store/source values for consistent reporting."""
-    s = (s or "").strip()
-    if not s:
-        return "Unknown"
-    s_low = s.lower()
-    if "app" in s_low and "store" in s_low:
-        return "App Store"
-    if "google" in s_low or "play" in s_low:
-        return "Google Play"
-    return s
+def get_today_negative_reviews(rows):
+    """
+    new_data_1d.json is already built with LAST_DAYS=1 (last 24h-ish window).
+    So include ALL negatives in this window instead of only those on the max(review_date).
+    This ensures App Store negatives are not dropped when Apple RSS updates lag by a day.
+    """
+    out = []
+    for r in rows:
+        if canon_sent(r.get("sentiment_std") or r.get("sentiment")) == "Negative":
+            out.append(r)
+    return out
 
 
 def _esc_md_cell(s):
@@ -45,13 +43,10 @@ def _esc_md_cell(s):
 
 
 def append_details_table(path, rows, max_rows=300):
-    """
-    Append a Markdown table of negative reviews in the provided rows.
-    Rows should ideally already be filtered to negatives, but we re-check is_negative() for safety.
-    """
     neg = []
     for r in rows:
-        if not is_negative(r):
+        # Safety: keep only negatives even if caller accidentally passes unfiltered rows
+        if canon_sent(r.get("sentiment_std") or r.get("sentiment")) != "Negative":
             continue
 
         review = (r.get("review") or "").replace("\r", " ").replace("\n", " ").strip()
@@ -60,16 +55,16 @@ def append_details_table(path, rows, max_rows=300):
 
         neg.append({
             "Category": str(r.get("category", "")).strip() or "Uncategorized",
-            "Review": review or "_(empty)_",
+            "Review": review,
             "App Version": str(r.get("app_version") or "Unknown"),
             "Date": str(r.get("review_date") or ""),
-            "Source": normalize_source(r.get("source")),
+            "Source": str(r.get("source") or "Unknown"),
         })
 
     with open(path, "a", encoding="utf-8") as f:
-        f.write("\n\n---\n\n### Negative Review Details (last 1 day window)\n\n")
+        f.write("\n\n---\n\n### Negative Review Details (last 1-day window)\n\n")
         if not neg:
-            f.write("_(no negative rows in the last 1 day window)_\n")
+            f.write("_(no negative rows in the last 1-day window)_\n")
             return
 
         cols = ["Category", "Review", "App Version", "Date", "Source"]
@@ -84,7 +79,7 @@ def append_details_table(path, rows, max_rows=300):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--current", required=False, help="Previous baseline (data_1d.json) (unused in daily-negative mode)")
+    ap.add_argument("--current", required=True, help="Previous baseline (data_1d.json) (kept for compatibility)")
     ap.add_argument("--new", required=True, help="Newly scraped data (new_data_1d.json)")
     ap.add_argument("--report", required=True)
     args = ap.parse_args()
@@ -92,41 +87,33 @@ def main():
     new = load_json(args.new)
 
     # ------------------------------------------------------
-    # DAILY ALERT LOGIC:
-    # Dataset is already LAST_DAYS=1 in workflow,
-    # so "today" = the last 1 day window. Show ALL negatives in that window.
+    # ALERT LOGIC: alert = did last 1-day window produce ≥1 negatives?
     # ------------------------------------------------------
-    negatives = [r for r in new if is_negative(r)]
-    alert = len(negatives) > 0
-    updated = alert  # Updated = yes when new negative reviews exist in last 1 day window
-
-    # quick breakdowns (useful for debugging visibility)
-    sources = [normalize_source(r.get("source")) for r in negatives]
-    by_source = Counter(sources)
+    today_negatives = get_today_negative_reviews(new)
+    alert = len(today_negatives) > 0
+    updated = alert
 
     # ---- Write summary report ----
     with open(args.report, "w", encoding="utf-8") as f:
         f.write("# Negative Sentiment Daily Report\n\n")
-        f.write(f"- Negative reviews in last 1 day window: **{len(negatives)}**\n")
+        f.write(f"- New negative reviews in last 1-day window: **{len(today_negatives)}**\n")
         f.write(f"- Alert triggered: **{'yes' if alert else 'no'}**\n\n")
 
-        if negatives:
+        if not alert:
+            f.write("No negative reviews were found in the last 1-day window.\n")
+        else:
+            # Optional: helps verify App Store is included
+            src_counts = defaultdict(int)
+            for r in today_negatives:
+                src_counts[str(r.get("source") or "Unknown")] += 1
+            f.write("Negative reviews were detected in the last 1-day window.\n\n")
             f.write("## Breakdown by Source\n\n")
-            for src, cnt in by_source.most_common():
-                f.write(f"- {src}: **{cnt}**\n")
+            for k in sorted(src_counts.keys()):
+                f.write(f"- {k}: **{src_counts[k]}**\n")
             f.write("\n")
 
-            # Optional: show latest review_date values we saw (helps validate RSS lag)
-            dates = sorted({str(r.get("review_date")) for r in negatives if r.get("review_date")})
-            if dates:
-                f.write("## Dates Seen (negative reviews)\n\n")
-                f.write(f"- Min date: **{dates[0]}**\n")
-                f.write(f"- Max date: **{dates[-1]}**\n\n")
-        else:
-            f.write("No negative reviews were found in the last 1 day window.\n")
-
-    # ---- Append negatives table ----
-    append_details_table(args.report, negatives)
+    # ---- Append negative reviews table ----
+    append_details_table(args.report, today_negatives)
 
     # ---- GitHub Action Outputs ----
     print(f"updated={str(updated).lower()}")
