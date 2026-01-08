@@ -1,0 +1,123 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Daily Alert Report</title>
+
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:0; }
+.main { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+table { border-collapse: collapse; width:100%; font-size: 14px; }
+th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #fafafa; }
+code, pre { background:#f6f7f9; border-radius:6px; padding:2px 4px; }
+h1,h2,h3 { margin-top: 1.2em; }
+</style>
+
+</head><body>
+<div class="main">
+<h1>Negative Sentiment Delta Report</h1>
+<ul>
+<li>Updated file content: <strong>yes</strong></li>
+<li>Alert conditions: abs ≥ 1 or rel ≥ 10%</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th style="text-align: right;">Neg (old)</th>
+<th style="text-align: right;">Neg (new)</th>
+<th style="text-align: right;">Δ</th>
+<th style="text-align: right;">Δ%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Crashes/Bugs</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">+2</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+<tr>
+<td>Payments</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">+1</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">+2</td>
+<td style="text-align: right;">100.0%</td>
+</tr>
+</tbody>
+</table>
+<h3>Crashes/Bugs — new negative samples</h3>
+<ul>
+<li>app is broken, won't register new device</li>
+<li>stop showing up on my feed, your restaurant serves absolute garbage</li>
+</ul>
+<h3>Payments — new negative samples</h3>
+<ul>
+<li>what a horrible experience. i wanted to pay cash at the window 10.91 with the coupon price, the app was obliging me to add my credit card information. I decided to go drive thru, show the app price and say I wanted to pay cash. impossible to do. paying cash the same trio was 13.27 instead of 10.91. I dont go to McDonald's as much as I used to because I find the prices for food are too steap but now I am absolutely done and will not be going back again. you've now lost me completely.</li>
+</ul>
+<h3>UI/UX — new negative samples</h3>
+<ul>
+<li>HELP FOR THE USERS: you need to clear your cache and local storage for the app to work. I STAND BY MY STATEMENT: YOUR DEVS ARE IDIOTS. It seems like whomever was QA was drunk, absent, or both. Same with the UX and UI designer. Your company wonders why the app is getting low ratings for so long? For a company your size not to venture into mobile properly is suicide. Update, bonus feature. If you set your location add to your cart it will change your store if you move before you checkout.</li>
+<li>Not bad, but one major annoyance... if the two of you are having the same breakfast, it won't let you customize your coffees. It'll let you change one, but then it changes all the coffees to be the same. It won't let one of you have a decaffeinated - it makes both orders decaffs!</li>
+</ul>
+<hr />
+<h3>Negative Review Details (latest run)</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Review</th>
+<th>App Version</th>
+<th>Date</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Payments</td>
+<td>what a horrible experience. i wanted to pay cash at the window 10.91 with the coupon price, the app was obliging me to add my credit card information. I decided to go drive thru, show the app price an…</td>
+<td>25.111.0</td>
+<td>2026-01-07</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>Crashes/Bugs</td>
+<td>app is broken, won't register new device</td>
+<td>25.111.0</td>
+<td>2026-01-07</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td>HELP FOR THE USERS: you need to clear your cache and local storage for the app to work. I STAND BY MY STATEMENT: YOUR DEVS ARE IDIOTS. It seems like whomever was QA was drunk, absent, or both. Same wi…</td>
+<td>25.111.0</td>
+<td>2026-01-07</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>Crashes/Bugs</td>
+<td>stop showing up on my feed, your restaurant serves absolute garbage</td>
+<td>Unknown</td>
+<td>2026-01-07</td>
+<td>Google Play</td>
+</tr>
+<tr>
+<td>UI/UX</td>
+<td>Not bad, but one major annoyance... if the two of you are having the same breakfast, it won't let you customize your coffees. It'll let you change one, but then it changes all the coffees to be the sa…</td>
+<td>25.111.0</td>
+<td>2026-01-07</td>
+<td>Google Play</td>
+</tr>
+</tbody>
+</table>
+</div>
+</body></html>
