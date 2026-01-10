@@ -1,13 +1,15 @@
 # scripts/compare_negatives.py
 # -*- coding: utf-8 -*-
 
-import argparse, json, os
+import argparse
+import json
+import os
 from collections import defaultdict
 
 SENTI_MAP = {
-    "negative":"Negative","NEGATIVE":"Negative","LABEL_0":"Negative",
-    "neutral":"Neutral","NEUTRAL":"Neutral","LABEL_1":"Neutral",
-    "positive":"Positive","POSITIVE":"Positive","LABEL_2":"Positive"
+    "negative": "Negative", "NEGATIVE": "Negative", "LABEL_0": "Negative",
+    "neutral": "Neutral", "NEUTRAL": "Neutral", "LABEL_1": "Neutral",
+    "positive": "Positive", "POSITIVE": "Positive", "LABEL_2": "Positive"
 }
 
 def load_json(path):
@@ -16,135 +18,108 @@ def load_json(path):
 def canon_sent(s):
     return SENTI_MAP.get(str(s), s or "")
 
-def neg_counts(rows):
-    """Count Negative reviews per category (keeps your original logic)."""
-    by = defaultdict(int)
-    for r in rows:
-        cat = str(r.get("category","")).strip()
-        if canon_sent(r.get("sentiment_std") or r.get("sentiment")) == "Negative":
-            by[cat] += 1
-    return dict(by)
+def is_negative(r):
+    return canon_sent(r.get("sentiment_std") or r.get("sentiment")) == "Negative"
 
-def file_hash(path):
-    if not os.path.exists(path): return ""
-    import hashlib
-    h = hashlib.sha256()
-    with open(path, "rb") as f: h.update(f.read())
-    return h.hexdigest()
+def norm_source(s):
+    """Normalize to two buckets so reporting is crystal clear."""
+    s = (s or "").strip().lower()
+    if "app store" in s or ("app" in s and "store" in s):
+        return "App Store"
+    if "google" in s or "play" in s:
+        return "Google Play"
+    return (s or "Unknown").title()
 
-def examples(rows, category, max_n=5):
-    """Your existing bullet samples (kept)."""
-    out = []
-    n = 0
-    for r in rows:
-        if str(r.get("category","")).strip()==category and canon_sent(r.get("sentiment_std") or r.get("sentiment"))=="Negative":
-            txt = (r.get("review") or "").strip().replace("\n"," ")
-            if txt:
-                out.append(f"- {txt[:500]}{'…' if len(txt)>500 else ''}")
-                n += 1
-                if n >= max_n: break
-    return "\n".join(out) or "_no sample_"
+def get_window_negatives(rows):
+    """new_data_1d.json is already LAST_DAYS=1, so include all negatives in this window."""
+    return [r for r in rows if is_negative(r)]
 
 def _esc_md_cell(s):
-    """Escape pipes/newlines for Markdown tables."""
     s = "" if s is None else str(s)
-    return s.replace("\n"," ").replace("|","\\|").strip()
+    return s.replace("\n", " ").replace("\r", " ").replace("|", "\\|").strip()
 
-def append_details_table(path, rows, only_categories=None, max_rows=300):
-    """
-    Append a Markdown table with columns:
-      Category | Review | App Version | Date
-    - rows: list of dicts (new_data.json)
-    - only_categories: optional set of categories to include (e.g., only those with increases)
-    """
-    # Filter to Negative
+def append_details_table(path, rows, max_rows=300):
     neg = []
     for r in rows:
-        if canon_sent(r.get("sentiment_std") or r.get("sentiment")) != "Negative":
+        if not is_negative(r):
             continue
-        cat = str(r.get("category","")).strip()
-        if only_categories and cat not in only_categories:
-            continue
-        review = (r.get("review") or "").replace("\r"," ").replace("\n"," ").strip()
-        if len(review) > 200:
-            review = review[:200] + "…"
+
+        review = (r.get("review") or "").replace("\r", " ").replace("\n", " ").strip()
+        if len(review) > 800:
+            review = review[:800] + "…"
+
         neg.append({
-            "Category": cat or "Uncategorized",
+            "Category": str(r.get("category", "")).strip() or "Uncategorized",
             "Review": review,
             "App Version": str(r.get("app_version") or "Unknown"),
-            "Date": str(r.get("review_date") or ""), 
-            "Source": str(r.get("source") or "Unknown"),
+            "Date": str(r.get("review_date") or ""),
+            "Source": norm_source(r.get("source")),
         })
 
     with open(path, "a", encoding="utf-8") as f:
-        f.write("\n\n---\n\n### Negative Review Details (latest run)\n\n")
+        f.write("\n\n---\n\n### Negative Review Details (last 1-day window)\n\n")
         if not neg:
-            f.write("_(no negative rows to display)_\n")
+            f.write("_(no negative rows in the last 1-day window)_\n")
             return
-        # Build Markdown table manually (no extra deps)
-        cols = ["Category","Review","App Version","Date","Source"]
+
+        cols = ["Category", "Review", "App Version", "Date", "Source"]
         f.write("| " + " | ".join(cols) + " |\n")
-        f.write("| " + " | ".join(["---"]*len(cols)) + " |\n")
+        f.write("| " + " | ".join(["---"] * len(cols)) + " |\n")
+
         for i, row in enumerate(neg):
-            if i >= max_rows: break
+            if i >= max_rows:
+                break
             f.write("| " + " | ".join(_esc_md_cell(row[c]) for c in cols) + " |\n")
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--current", required=True)
-    ap.add_argument("--new", required=True)
+    ap.add_argument("--current", required=True, help="Previous baseline (data_1d.json) (kept for compatibility)")
+    ap.add_argument("--new", required=True, help="Newly scraped data (new_data_1d.json)")
     ap.add_argument("--report", required=True)
-    ap.add_argument("--threshold-abs", type=int, default=3)
-    ap.add_argument("--threshold-rel", type=float, default=0.2)
     args = ap.parse_args()
 
-    cur = load_json(args.current)
     new = load_json(args.new)
 
-    # "updated" = file content changed at all (baseline heuristic)
-    updated = (file_hash(args.current) != file_hash(args.new))
+    # Counts for proof/debug
+    total_by_source = defaultdict(int)
+    for r in new:
+        total_by_source[norm_source(r.get("source"))] += 1
 
-    cur_neg = neg_counts(cur)
-    new_neg = neg_counts(new)
+    negatives = get_window_negatives(new)
+    neg_by_source = defaultdict(int)
+    for r in negatives:
+        neg_by_source[norm_source(r.get("source"))] += 1
 
-    cats = sorted(set(cur_neg) | set(new_neg))
-    increases = []
-    for c in cats:
-        a = cur_neg.get(c,0); b = new_neg.get(c,0)
-        delta = b - a
-        rel = (delta / a) if a>0 else (1.0 if b>0 else 0.0)
-        if delta>0 and (delta >= args.threshold_abs or rel >= args.threshold_rel):
-            increases.append((c, a, b, delta, rel))
+    alert = len(negatives) > 0
+    updated = alert
 
-    alert = bool(increases)
-
-    # ---- Write the report (summary + samples) ----
     with open(args.report, "w", encoding="utf-8") as f:
-        f.write(f"# Negative Sentiment Delta Report\n\n")
-        f.write(f"- Updated file content: **{'yes' if updated else 'no'}**\n")
-        f.write(f"- Alert conditions: abs ≥ {args.threshold_abs} or rel ≥ {int(args.threshold_rel*100)}%\n\n")
+        f.write("# Negative Sentiment Daily Report\n\n")
+        f.write(f"- Total reviews in last 1-day window: **{len(new)}**\n")
+        f.write(f"- Negative reviews in last 1-day window: **{len(negatives)}**\n")
+        f.write(f"- Alert triggered: **{'yes' if alert else 'no'}**\n\n")
 
-        if not increases:
-            f.write("No categories exceeded thresholds.\n")
+        f.write("## Total reviews by Source (last 1-day window)\n\n")
+        for k in sorted(total_by_source.keys()):
+            f.write(f"- {k}: **{total_by_source[k]}**\n")
+        f.write("\n")
+
+        f.write("## Negative reviews by Source (last 1-day window)\n\n")
+        if not negatives:
+            f.write("- _(none)_\n\n")
         else:
-            f.write("| Category | Neg (old) | Neg (new) | Δ | Δ% |\n|---|---:|---:|---:|---:|\n")
-            for (c, a, b, d, r) in increases:
-                f.write(f"| {c or '_uncategorized_'} | {a} | {b} | +{d} | {round(r*100,1)}% |\n")
+            for k in sorted(neg_by_source.keys()):
+                f.write(f"- {k}: **{neg_by_source[k]}**\n")
             f.write("\n")
-            for (c, a, b, d, r) in increases:
-                f.write(f"### {c or '_uncategorized_'} — new negative samples\n")
-                f.write(examples(new, c, 5) + "\n\n")
 
-    # ---- Append the detailed table (Category, Review, App Version, Date) ----
-    incr_cats = {c for (c, *_rest) in increases} if increases else None  # pass None to include none if no increases
-    append_details_table(args.report, new, only_categories=incr_cats)
+    append_details_table(args.report, negatives)
 
-    # ---- Emit step outputs for GitHub Actions ----
     print(f"updated={str(updated).lower()}")
     print(f"alert={str(alert).lower()}")
+
     out = os.getenv("GITHUB_OUTPUT")
     if out:
-        with open(out, "a") as fh:
+        with open(out, "a", encoding="utf-8") as fh:
             fh.write(f"updated={str(updated).lower()}\n")
             fh.write(f"alert={str(alert).lower()}\n")
 
