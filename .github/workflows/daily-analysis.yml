@@ -68,7 +68,7 @@ jobs:
           LAST_DAYS: "30"            # 30-day window for site/dashboard
 
           # NLP labels & caches
-          ZS_LABELS: "Authentication/Login,Performance/Speed,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery,Monopoly"
+          ZS_LABELS: "Authentication/Login,McValue,UI/UX,Crashes/Bugs,Payments,Rewards/Offers,Feature Requests,Customer Support,Location/Geolocation,Refunds,Delivery,Monopoly"
           HF_HOME: ${{ runner.temp }}/hf_home
           TRANSFORMERS_CACHE: ${{ runner.temp }}/hf_home
           HF_HUB_DISABLE_SYMLINKS: "1"
