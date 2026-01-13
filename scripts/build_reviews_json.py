@@ -18,9 +18,9 @@ SENTI_MAP = {
 }
 
 DEFAULT_LABELS = [
-    "Authentication/Login", "McValue", "UI/UX",
+    "Authentication/Login", "Perfromance/Speed", "UI/UX",
     "Crashes/Bugs", "Payments", "Rewards/Offers",
-    "Feature Requests", "Customer Support", "Location/Geolocation",
+    "Feature Requests", "McValue", "Location/Geolocation",
     "Refunds", "Delivery", "Monopoly"
 ]
 
