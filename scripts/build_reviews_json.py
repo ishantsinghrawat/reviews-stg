@@ -119,6 +119,7 @@ def fetch_app_store_rss(
             updated = e.get("updated", {}).get("label")
             rows.append({
                 "source": "App Store",
+                "review_id": None,  # RSS doesn't give a stable review id
                 "review": (e.get("content", {}) or {}).get("label"),
                 "rating": int((e.get("im:rating", {}) or {}).get("label", "0") or 0),
                 "review_date": pd.to_datetime(updated, errors="coerce").strftime("%Y-%m-%d") if updated else None,
@@ -172,7 +173,6 @@ def run_models(df: pd.DataFrame, labels: list[str]) -> pd.DataFrame:
     out = df.copy()
     out["sentiment_std"] = senti_std
     out["sentiment_score"] = senti_score
-    # honor existing category if present; otherwise fill with zero-shot
     if "category" not in out.columns:
         out["category"] = None
     out["category"] = out["category"].mask(out["category"].isna() | (out["category"] == ""), cat_pred)
@@ -189,7 +189,6 @@ def main():
     args = parse_args()
     labels = [x.strip() for x in args.labels.split(",") if x.strip()]
 
-    # --- fetch both sources ---
     df_gp = fetch_google_play(args.package, args.lang, args.country)
 
     include_ios = str(args.include_appstore).lower() == "true"
@@ -224,26 +223,26 @@ def main():
         df = df[df.get("app_version", "").astype(str) == str(args.only_version)]
         log(f"[filter] app_version == {args.only_version}: {len(df)} rows")
 
-    # --- safety: must have review text ---
     if "review" not in df.columns:
         log("[error] no 'review' column after fetch. Exiting.")
-        with open(args.out_new, "w", encoding="utf-8") as f: json.dump([], f)
+        with open(args.out_new, "w", encoding="utf-8") as f:
+            json.dump([], f)
         return
 
-    # --- NLP ---
     enriched = run_models(df, labels)
 
     # --- final output for site + comparator ---
+    # NOTE: we include review_id/user_name/review_title to enable stable dedupe in compare_negatives.py
     final_cols = [
+        "review_id", "user_name", "review_title",
         "review", "category", "sentiment_std", "rating", "review_date",
-        "source", "app_version"  # <-- keep store & version visible
+        "source", "app_version"
     ]
     for c in final_cols:
         if c not in enriched.columns:
             enriched[c] = None
 
     enriched[final_cols].to_json(args.out_new, orient="records", date_format="iso", force_ascii=False)
-    # keep reviews.json for optional use; safe to keep identical schema
     enriched[final_cols].to_json(args.out_reviews, orient="records", date_format="iso", force_ascii=False)
 
     log(f"[ok] wrote {args.out_new} and {args.out_reviews} with {len(enriched)} rows")
