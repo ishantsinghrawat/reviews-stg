@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import hashlib
 from collections import defaultdict
 
 SENTI_MAP = {
@@ -21,99 +22,135 @@ def canon_sent(s):
 def is_negative(r):
     return canon_sent(r.get("sentiment_std") or r.get("sentiment")) == "Negative"
 
-def norm_source(s):
-    """Normalize to two buckets so reporting is crystal clear."""
-    s = (s or "").strip().lower()
-    if "app store" in s or ("app" in s and "store" in s):
-        return "App Store"
-    if "google" in s or "play" in s:
-        return "Google Play"
-    return (s or "Unknown").title()
+def _norm_text(s, limit=800):
+    s = "" if s is None else str(s)
+    s = s.replace("\r", " ").replace("\n", " ").strip()
+    return s[:limit]
 
-def get_window_negatives(rows):
-    """new_data_1d.json is already LAST_DAYS=1, so include all negatives in this window."""
-    return [r for r in rows if is_negative(r)]
+def review_uid(r):
+    """
+    Stable ID for dedupe.
+    - Google Play: use review_id when available
+    - App Store RSS: hash a signature of stable fields
+    """
+    rid = (r.get("review_id") or "").strip()
+    src = (r.get("source") or "").strip().lower()
+
+    if rid:
+        # strongly stable for Google Play
+        return f"gp:{rid}"
+
+    # fallback signature for iOS (and any row without review_id)
+    sig = "|".join([
+        (r.get("source") or ""),
+        (r.get("user_name") or ""),
+        (r.get("review_title") or ""),
+        str(r.get("rating") or ""),
+        str(r.get("review_date") or ""),
+        (r.get("app_version") or ""),
+        _norm_text(r.get("review") or "", limit=400),
+    ])
+    h = hashlib.sha256(sig.encode("utf-8")).hexdigest()
+    return f"hash:{h}"
 
 def _esc_md_cell(s):
     s = "" if s is None else str(s)
     return s.replace("\n", " ").replace("\r", " ").replace("|", "\\|").strip()
 
 def append_details_table(path, rows, max_rows=300):
-    neg = []
+    """
+    rows: should be NEW negative reviews only (already filtered),
+    but we keep a safety check.
+    """
+    out_rows = []
     for r in rows:
         if not is_negative(r):
             continue
-
-        review = (r.get("review") or "").replace("\r", " ").replace("\n", " ").strip()
-        if len(review) > 800:
-            review = review[:800] + "…"
-
-        neg.append({
+        out_rows.append({
             "Category": str(r.get("category", "")).strip() or "Uncategorized",
-            "Review": review,
+            "Review": _norm_text(r.get("review") or "", limit=800),
             "App Version": str(r.get("app_version") or "Unknown"),
             "Date": str(r.get("review_date") or ""),
-            "Source": norm_source(r.get("source")),
+            "Rating": str(r.get("rating") or ""),
+            "Source": str(r.get("source") or "Unknown"),
         })
 
     with open(path, "a", encoding="utf-8") as f:
-        f.write("\n\n---\n\n### Negative Review Details (last 1-day window)\n\n")
-        if not neg:
-            f.write("_(no negative rows in the last 1-day window)_\n")
+        f.write("\n\n---\n\n### New Negative Review Details (new since yesterday)\n\n")
+        if not out_rows:
+            f.write("_(no NEW negative rows since yesterday)_\n")
             return
 
-        cols = ["Category", "Review", "App Version", "Date", "Source"]
+        cols = ["Category", "Review", "App Version", "Date", "Rating", "Source"]
         f.write("| " + " | ".join(cols) + " |\n")
         f.write("| " + " | ".join(["---"] * len(cols)) + " |\n")
 
-        for i, row in enumerate(neg):
+        for i, row in enumerate(out_rows):
             if i >= max_rows:
                 break
             f.write("| " + " | ".join(_esc_md_cell(row[c]) for c in cols) + " |\n")
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--current", required=True, help="Previous baseline (data_1d.json) (kept for compatibility)")
+    ap.add_argument("--current", required=True, help="Previous baseline (data_1d.json)")
     ap.add_argument("--new", required=True, help="Newly scraped data (new_data_1d.json)")
     ap.add_argument("--report", required=True)
     args = ap.parse_args()
 
+    cur = load_json(args.current)
     new = load_json(args.new)
 
-    # Counts for proof/debug
-    total_by_source = defaultdict(int)
-    for r in new:
-        total_by_source[norm_source(r.get("source"))] += 1
+    cur_ids = {review_uid(r) for r in cur}
+    new_only = [r for r in new if review_uid(r) not in cur_ids]
 
-    negatives = get_window_negatives(new)
-    neg_by_source = defaultdict(int)
-    for r in negatives:
-        neg_by_source[norm_source(r.get("source"))] += 1
+    new_negatives = [r for r in new_only if is_negative(r)]
 
-    alert = len(negatives) > 0
+    alert = len(new_negatives) > 0
     updated = alert
 
+    # breakdowns (to prove both stores are being scraped and what is new)
+    total_by_source = defaultdict(int)
+    new_only_by_source = defaultdict(int)
+    new_neg_by_source = defaultdict(int)
+
+    for r in new:
+        total_by_source[str(r.get("source") or "Unknown")] += 1
+    for r in new_only:
+        new_only_by_source[str(r.get("source") or "Unknown")] += 1
+    for r in new_negatives:
+        new_neg_by_source[str(r.get("source") or "Unknown")] += 1
+
     with open(args.report, "w", encoding="utf-8") as f:
-        f.write("# Negative Sentiment Daily Report\n\n")
-        f.write(f"- Total reviews in last 1-day window: **{len(new)}**\n")
-        f.write(f"- Negative reviews in last 1-day window: **{len(negatives)}**\n")
+        f.write("# Negative Sentiment Daily Report (diff-based)\n\n")
+        f.write(f"- Total scraped rows (today run): **{len(new)}**\n")
+        f.write(f"- New rows since yesterday: **{len(new_only)}**\n")
+        f.write(f"- New negative rows since yesterday: **{len(new_negatives)}**\n")
         f.write(f"- Alert triggered: **{'yes' if alert else 'no'}**\n\n")
 
-        f.write("## Total reviews by Source (last 1-day window)\n\n")
+        f.write("## Total rows by Source (today run)\n\n")
         for k in sorted(total_by_source.keys()):
             f.write(f"- {k}: **{total_by_source[k]}**\n")
         f.write("\n")
 
-        f.write("## Negative reviews by Source (last 1-day window)\n\n")
-        if not negatives:
+        f.write("## New rows by Source (since yesterday)\n\n")
+        if not new_only:
             f.write("- _(none)_\n\n")
         else:
-            for k in sorted(neg_by_source.keys()):
-                f.write(f"- {k}: **{neg_by_source[k]}**\n")
+            for k in sorted(new_only_by_source.keys()):
+                f.write(f"- {k}: **{new_only_by_source[k]}**\n")
             f.write("\n")
 
-    append_details_table(args.report, negatives)
+        f.write("## New negative rows by Source (since yesterday)\n\n")
+        if not new_negatives:
+            f.write("- _(none)_\n\n")
+        else:
+            for k in sorted(new_neg_by_source.keys()):
+                f.write(f"- {k}: **{new_neg_by_source[k]}**\n")
+            f.write("\n")
 
+    append_details_table(args.report, new_negatives)
+
+    # GitHub Action outputs
     print(f"updated={str(updated).lower()}")
     print(f"alert={str(alert).lower()}")
 
