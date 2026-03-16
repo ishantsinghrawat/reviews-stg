@@ -370,6 +370,7 @@ function fillStoreSelect() {
   sel.addEventListener('change', () => {
     fillVersionSelect();
     clickedPairs = [];
+    selectedGroups = [];                                      // FIX: clear hidden category state
     document.getElementById('categorySelect').selectedIndex = -1;
     refreshViews({ skipChart: false }); // chart recompute on scope change
   });
@@ -379,16 +380,23 @@ function fillVersionSelect() {
   const store = getSelectedStore();
   const scope = store ? RAW.filter(r => (r.source || 'Unknown') === store) : RAW;
   const versions = ['All Versions', ...uniq(scope.map(r => String(r.app_version || 'Unknown'))).sort()];
-  const current = sel.value;
+  const prevValue = sel.value;                                // FIX: remember previous value
+
   sel.innerHTML = versions.map((v, i) =>
     `<option value="${i===0 ? '' : v}">${v}</option>`
   ).join('');
-  if (versions.includes(current)) sel.value = current;
-  sel.addEventListener('change', () => {
+
+  // FIX: restore previous selection only if that value exists among the new options
+  const hasPrev = Array.from(sel.options).some(o => o.value === prevValue);
+  sel.value = hasPrev ? prevValue : '';
+
+  // FIX: use stable onchange (no { once: true }) so it works every time
+  sel.onchange = () => {
     clickedPairs = [];
+    selectedGroups = [];                                      // FIX: clear hidden category state to match UI
     document.getElementById('categorySelect').selectedIndex = -1;
     refreshViews({ skipChart: false }); // chart recompute on scope change
-  }, { once: true });
+  };
 }
 
 /* ---------- Reset ---------- */
@@ -437,14 +445,3 @@ fetch(DATA_URL)
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
